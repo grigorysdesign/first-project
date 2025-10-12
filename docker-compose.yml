@@ -1,0 +1,80 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_password
+      POSTGRES_DB: simplereplit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio_password
+    command: server /data
+    ports:
+      - "9000:9000"
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+
+  api:
+    build: ./api
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://app:app_password@postgres:5432/simplereplit
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minio
+      S3_SECRET_KEY: minio_password
+      OLLAMA_URL: http://ollama:11434
+      RUNNER_URL: http://runner:4000
+      PROJECTS_ROOT: /srv/projects
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - ollama
+    ports:
+      - "8080:8080"
+    volumes:
+      - projects:/srv/projects
+
+  runner:
+    build: ./runner
+    privileged: false
+    environment:
+      MAX_CPU: "0.5"
+      MAX_MEM: "512m"
+      API_URL: http://api:8080
+    volumes:
+      - projects:/srv/projects
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
+      NEXT_PUBLIC_BROWSER_API_URL: http://localhost:8080
+
+volumes:
+  pgdata:
+  projects:
