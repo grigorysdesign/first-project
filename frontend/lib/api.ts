@@ -10,10 +10,58 @@ export interface FileNode {
   updated_at: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const SERVER_API_URL = process.env.NEXT_PUBLIC_API_URL;
+const BROWSER_API_URL = process.env.NEXT_PUBLIC_BROWSER_API_URL;
+
+function resolveBaseUrl() {
+  if (typeof window === "undefined") {
+    return SERVER_API_URL ?? "http://localhost:8080";
+  }
+
+  if (BROWSER_API_URL) {
+    return BROWSER_API_URL;
+  }
+
+  if (!SERVER_API_URL) {
+    return "";
+  }
+
+  try {
+    const url = new URL(SERVER_API_URL);
+    const isLocalHost =
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "0.0.0.0" ||
+      !url.hostname.includes(".");
+
+    if (isLocalHost) {
+      const browserHost = window.location.hostname;
+      url.hostname = browserHost;
+      return url.toString();
+    }
+
+    return url.toString();
+  } catch (error) {
+    console.warn("Failed to parse NEXT_PUBLIC_API_URL", error);
+    return SERVER_API_URL;
+  }
+}
+
+function buildRequestUrl(path: string) {
+  const baseUrl = resolveBaseUrl();
+  if (!baseUrl) {
+    return path;
+  }
+
+  try {
+    return new URL(path, baseUrl).toString();
+  } catch {
+    return `${baseUrl.replace(/\/$/, "")}${path}`;
+  }
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(buildRequestUrl(path), {
     headers: { "Content-Type": "application/json" },
     ...options,
     cache: "no-store"
