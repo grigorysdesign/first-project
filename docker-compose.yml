@@ -41,6 +41,7 @@ services:
       S3_SECRET_KEY: minio_password
       OLLAMA_URL: http://ollama:11434
       RUNNER_URL: http://runner:4000
+      PROJECTS_ROOT: /srv/projects
     depends_on:
       - postgres
       - redis
@@ -48,6 +49,8 @@ services:
       - ollama
     ports:
       - "8080:8080"
+    volumes:
+      - projects:/srv/projects
 
   runner:
     build: ./runner
@@ -68,6 +71,8 @@ services:
       - api
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
 
 volumes:
   pgdata:

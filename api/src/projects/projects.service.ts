@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { v4 as uuid } from "uuid";
 
 import { DatabaseService } from "../common/database.service";
@@ -16,13 +16,33 @@ export class ProjectsService {
   constructor(private readonly database: DatabaseService, private readonly filesService: FilesService) {}
 
   async create(payload: { name: string; stack: string }): Promise<{ id: string }> {
+    if (!payload.name?.trim()) {
+      throw new BadRequestException("Project name is required");
+    }
+    if (!this.isSupportedStack(payload.stack)) {
+      throw new BadRequestException("Unsupported stack");
+    }
+    const trimmedName = payload.name.trim();
     const id = uuid();
     await this.database.query(
       "INSERT INTO projects(id, name, stack, created_at) VALUES($1, $2, $3, now())",
-      [id, payload.name, payload.stack]
+      [id, trimmedName, payload.stack]
     );
+    await this.filesService.ensureProjectDirectory(id);
     await this.seedProject(id, payload.stack as ProjectEntity["stack"]);
     return { id };
+  }
+
+  async list(): Promise<ProjectEntity[]> {
+    const result = await this.database.query<{
+      rows: Array<{ id: string; name: string; stack: string; created_at: Date | string }>;
+    }>("SELECT id, name, stack, created_at FROM projects ORDER BY created_at DESC");
+    return result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      stack: row.stack as ProjectEntity["stack"],
+      created_at: new Date(row.created_at)
+    }));
   }
 
   async getById(projectId: string): Promise<ProjectEntity> {
@@ -31,9 +51,29 @@ export class ProjectsService {
       [projectId]
     );
     if (!result.rows.length) {
-      throw new Error("Project not found");
+      throw new NotFoundException("Project not found");
     }
-    return result.rows[0];
+    const project = result.rows[0];
+    return { ...project, created_at: new Date(project.created_at) };
+  }
+
+  async update(projectId: string, payload: { name?: string }): Promise<ProjectEntity> {
+    const nextName = payload.name?.trim();
+    if (nextName) {
+      const updateResult = await this.database.query("UPDATE projects SET name = $1 WHERE id = $2", [nextName, projectId]);
+      if (updateResult.rowCount === 0) {
+        throw new NotFoundException("Project not found");
+      }
+    }
+    return this.getById(projectId);
+  }
+
+  async remove(projectId: string) {
+    const result = await this.database.query("DELETE FROM projects WHERE id = $1", [projectId]);
+    if (result.rowCount === 0) {
+      throw new NotFoundException("Project not found");
+    }
+    await this.filesService.removeProjectDirectory(projectId);
   }
 
   private async seedProject(projectId: string, stack: ProjectEntity["stack"]) {
@@ -103,5 +143,9 @@ export class ProjectsService {
       null,
       2
     );
+  }
+
+  private isSupportedStack(stack: string): stack is ProjectEntity["stack"] {
+    return stack === "python" || stack === "node" || stack === "static";
   }
 }

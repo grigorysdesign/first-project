@@ -9,3 +9,4 @@ frontend/.next
 frontend/node_modules
 api/node_modules
 runner/node_modules
+projects-data

@@ -1,5 +1,5 @@
 import fetch from "cross-fetch";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { v4 as uuid } from "uuid";
 
@@ -8,6 +8,8 @@ import { LogsGateway } from "../ws/logs.gateway";
 
 @Injectable()
 export class RunService {
+  private readonly logger = new Logger(RunService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly database: DatabaseService,
@@ -47,6 +49,33 @@ export class RunService {
       runId
     ]);
     this.logsGateway.emitLog(projectId, `Run ${runId} ready on ${payload.url}`);
+    if (payload.container) {
+      void this.forwardLogs(projectId, payload.container as string);
+    } else {
+      this.logger.warn(`Runner response missing container identifier for project ${projectId}`);
+    }
     return { runId, url: payload.url };
+  }
+
+  private async forwardLogs(projectId: string, containerId: string) {
+    try {
+      const response = await fetch(`${this.runnerUrl}/logs/${containerId}`);
+      if (!response.ok || !response.body) {
+        this.logger.warn(`Unable to stream logs for container ${containerId}: ${response.status}`);
+        return;
+      }
+      const stream = response.body as unknown as NodeJS.ReadableStream;
+      stream.on("data", (chunk) => {
+        this.logsGateway.emitLog(projectId, chunk.toString());
+      });
+      stream.on("error", (error) => {
+        this.logger.error(`Log stream error for container ${containerId}: ${String(error)}`);
+      });
+      stream.on("end", () => {
+        this.logsGateway.emitLog(projectId, `Container ${containerId} exited`);
+      });
+    } catch (error) {
+      this.logger.error(`Failed to forward logs for container ${containerId}: ${String(error)}`);
+    }
   }
 }

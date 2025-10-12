@@ -14,6 +14,7 @@ docker compose up -d --build
 Через ~60 секунд откройте [http://localhost:3000](http://localhost:3000) и создайте первый проект.
 
 > Переменная `NEXT_PUBLIC_API_URL` в `.env` управляет адресом API для фронтенда (по умолчанию `http://localhost:8080`).
+> Каталог проектов по умолчанию сохраняется в `./projects-data` и монтируется как общий том для API и runner.
 
 ### Базовый сценарий
 
@@ -60,6 +61,7 @@ S3_ACCESS_KEY=minio
 S3_SECRET_KEY=minio_password
 OLLAMA_URL=http://localhost:11434
 RUNNER_URL=http://localhost:4000
+PROJECTS_ROOT=./projects-data
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 

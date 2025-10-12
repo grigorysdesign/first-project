@@ -32,8 +32,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listProjects: () => request<Project[]>(`/api/projects`),
   createProject: (payload: { name: string; stack: Project["stack"] }) =>
-    request<{ projectId: string }>(`/api/projects`, {
+    request<{ projectId: string; project: Project }>(`/api/projects`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
@@ -51,12 +52,17 @@ export const api = {
       method: "DELETE"
     }),
   aiGenerate: (payload: { projectId: string; prompt: string }) =>
-    request<{ files: Array<{ path: string }>; message: string }>(`/api/ai/generate`, {
+    request<{ files: Array<{ path: string; updated_at: string }>; message: string }>(`/api/ai/generate`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),
   aiDiff: (payload: { projectId: string; instruction: string }) =>
-    request<{ patches: Array<{ path: string }>; message: string }>(`/api/ai/diff`, {
+    request<{ files: Array<{ path: string; updated_at: string }>; message: string }>(`/api/ai/diff`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  aiExplain: (payload: { projectId: string; runId: string }) =>
+    request<{ explanation: string }>(`/api/ai/explain-error`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),

@@ -1,5 +1,5 @@
 const express = require("express");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 const path = require("path");
 
 const app = express();
@@ -45,6 +45,41 @@ app.post("/run", (req, res) => {
     }
     res.json({ url: `http://localhost:${port}`, container: stdout.trim() });
   });
+});
+
+app.get("/logs/:containerId", (req, res) => {
+  const { containerId } = req.params;
+  if (!containerId) {
+    return res.status(400).json({ error: "containerId is required" });
+  }
+
+  const logProcess = spawn("docker", ["logs", "-f", containerId]);
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+
+  const close = () => {
+    logProcess.kill("SIGTERM");
+  };
+
+  logProcess.stdout.on("data", (chunk) => {
+    res.write(chunk);
+  });
+
+  logProcess.stderr.on("data", (chunk) => {
+    res.write(chunk);
+  });
+
+  logProcess.on("error", (error) => {
+    res.write(`Runner log error: ${error.message}`);
+    res.end();
+  });
+
+  logProcess.on("close", () => {
+    res.end();
+  });
+
+  req.on("close", close);
+  req.on("end", close);
 });
 
 app.listen(4000, () => console.log("Runner ready on 4000"));

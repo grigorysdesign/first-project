@@ -1,12 +1,14 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
+import { applyPatch, parsePatch } from "diff";
 
 import { DatabaseService } from "../common/database.service";
-import { FilesService } from "../files/files.service";
+import { FilesService, ProjectFile } from "../files/files.service";
 
-import { GeneratedFile, OllamaProvider } from "./llm.provider";
+import { GeneratedFile, OllamaProvider, SuggestedPatch } from "./llm.provider";
 
 @Injectable()
 export class AIService {
+  private readonly logger = new Logger(AIService.name);
 
   constructor(
     private readonly llmProvider: OllamaProvider,
@@ -14,28 +16,59 @@ export class AIService {
     private readonly filesService: FilesService
   ) {}
 
-  async generate(projectId: string, prompt: string, stack: "python" | "node" | "static") {
-    const files = await this.llmProvider.generateFiles(prompt, stack);
-    for (const file of files) {
-      await this.filesService.upsert(projectId, file.path, file.content);
+  async generate(
+    projectId: string,
+    prompt: string,
+    stack: "python" | "node" | "static"
+  ): Promise<{ message: string; files: ProjectFile[] }> {
+    let generated: GeneratedFile[] = [];
+    let message = "AI generated files";
+    try {
+      generated = await this.llmProvider.generateFiles(prompt, stack);
+    } catch (error) {
+      this.logger.warn(`LLM generate failed: ${String(error)}`);
+      generated = [];
     }
-    await this.database.query("INSERT INTO runs(project_id, status, logs) VALUES($1, $2, $3)", [
-      projectId,
-      "completed",
-      `AI generated ${files.length} files`
-    ]);
-    return files;
+
+    if (!generated.length) {
+      generated = this.fallbackFiles(stack, prompt);
+      message = "LLM unavailable, fallback snippet created";
+    }
+
+    const savedFiles: ProjectFile[] = [];
+    for (const file of generated) {
+      const saved = await this.filesService.upsert(projectId, file.path, file.content);
+      savedFiles.push(saved);
+    }
+
+    return { message: `${message}: ${savedFiles.length} file(s)`, files: savedFiles };
   }
 
-  async applyDiff(projectId: string, instruction: string) {
-    const patches = await this.llmProvider.suggestDiff(projectId, instruction);
-    // naive patch application: append patch content to logs table
-    await this.database.query("INSERT INTO runs(project_id, status, logs) VALUES($1, $2, $3)", [
-      projectId,
-      "completed",
-      `AI suggested diff: ${instruction}`
-    ]);
-    return patches;
+  async applyDiff(
+    projectId: string,
+    instruction: string,
+    stack: "python" | "node" | "static"
+  ): Promise<{ message: string; files: ProjectFile[] }> {
+    const context = await this.filesService.exportProjectFiles(projectId);
+    let patches: SuggestedPatch[] = [];
+    try {
+      patches = await this.llmProvider.suggestDiff(projectId, this.composeDiffInstruction(instruction, context, stack), context);
+    } catch (error) {
+      this.logger.warn(`LLM diff failed: ${String(error)}`);
+      patches = [];
+    }
+
+    const applied: ProjectFile[] = [];
+    for (const patch of patches) {
+      const updatedFiles = await this.applyPatchSuggestion(projectId, patch);
+      applied.push(...updatedFiles);
+    }
+
+    const message = applied.length
+      ? `Updated ${applied.length} file(s) with AI diff`
+      : "No changes were applied";
+
+    return { message, files: applied };
   }
 
   async explain(projectId: string, runId: string) {
@@ -53,5 +86,69 @@ export class AIService {
       [effectiveProjectId]
     );
     return this.llmProvider.explainError(logs ?? "", fileRows.rows);
+  }
+
+  private fallbackFiles(stack: "python" | "node" | "static", prompt: string): GeneratedFile[] {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const notesPath = `notes/${stack}-${timestamp}.md`;
+    return [
+      {
+        path: notesPath,
+        content: `# TODO\n\nStack: ${stack}\n\nPrompt:\n${prompt}\n`
+      }
+    ];
+  }
+
+  private composeDiffInstruction(
+    instruction: string,
+    context: Array<{ path: string; content: string }>,
+    stack: "python" | "node" | "static"
+  ) {
+    const preview = context.slice(0, 10);
+    return `Стек проекта: ${stack}. Инструкция: ${instruction}.\nТекущие файлы:${
+      preview.length ? "\n" + JSON.stringify(preview) : " отсутствуют"
+    }.`;
+  }
+
+  private async applyPatchSuggestion(projectId: string, patch: SuggestedPatch): Promise<ProjectFile[]> {
+    const parsed = parsePatch(patch.patch);
+    if (!parsed.length) {
+      if (patch.path && patch.path !== "diff.patch" && patch.patch.trim().length) {
+        const saved = await this.filesService.upsert(projectId, patch.path, patch.patch);
+        return [saved];
+      }
+      return [];
+    }
+
+    const updated: ProjectFile[] = [];
+
+    for (const filePatch of parsed) {
+      const targetPath = this.resolvePatchPath(filePatch, patch.path);
+      if (!targetPath) {
+        continue;
+      }
+      const existing = await this.filesService.readOptional(projectId, targetPath);
+      const baseContent = existing?.content ?? "";
+      const nextContent = applyPatch(baseContent, filePatch);
+      if (nextContent === false) {
+        this.logger.warn(`Failed to apply patch for ${targetPath}`);
+        continue;
+      }
+      const saved = await this.filesService.upsert(projectId, targetPath, nextContent);
+      updated.push(saved);
+    }
+
+    return updated;
+  }
+
+  private resolvePatchPath(filePatch: ReturnType<typeof parsePatch>[number], fallbackPath?: string) {
+    const candidates = [filePatch.newFileName, filePatch.oldFileName, fallbackPath].filter(Boolean) as string[];
+    for (const candidate of candidates) {
+      const cleaned = candidate.replace(/^([ab]\/)*/, "");
+      if (cleaned && cleaned !== "/dev/null") {
+        return cleaned;
+      }
+    }
+    return null;
   }
 }

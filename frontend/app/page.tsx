@@ -34,13 +34,15 @@ export default function HomePage() {
   const [project, setProject] = useState<ActiveProject | null>(null);
   const [activePath, setActivePath] = useState<string | undefined>();
   const [lastRefreshKey, setLastRefreshKey] = useState(0);
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
 
   const createProject = async () => {
     const result = await api.createProject({ name, stack: stack.value });
-    setProject({ id: result.projectId, stack: stack.value, name });
+    setProject({ id: result.projectId, stack: result.project.stack, name: result.project.name });
     setIsModalOpen(false);
     setActivePath(undefined);
     setLastRefreshKey((prev) => prev + 1);
+    setLastRunId(null);
   };
 
   useEffect(() => {
@@ -136,8 +138,13 @@ export default function HomePage() {
             />
             <EditorPane projectId={project.id} path={activePath} />
             <div className="flex w-96 flex-col">
-              <PreviewConsole projectId={project.id} />
-              <AIChatPanel projectId={project.id} onFilesUpdated={() => setLastRefreshKey((prev) => prev + 1)} />
+              <PreviewConsole projectId={project.id} onRun={setLastRunId} />
+              <AIChatPanel
+                key={project.id}
+                projectId={project.id}
+                lastRunId={lastRunId}
+                onFilesUpdated={() => setLastRefreshKey((prev) => prev + 1)}
+              />
             </div>
           </div>
         </div>

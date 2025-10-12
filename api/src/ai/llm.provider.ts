@@ -14,7 +14,11 @@ export interface SuggestedPatch {
 
 export interface LLMProvider {
   generateFiles(prompt: string, stack: "python" | "node" | "static"): Promise<GeneratedFile[]>;
-  suggestDiff(projectId: string, instruction: string): Promise<SuggestedPatch[]>;
+  suggestDiff(
+    projectId: string,
+    instruction: string,
+    files?: Array<{ path: string; content: string }>
+  ): Promise<SuggestedPatch[]>;
   explainError(logs: string, filesContext: GeneratedFile[]): Promise<string>;
 }
 
@@ -45,13 +49,20 @@ export class OllamaProvider implements LLMProvider {
     return files;
   }
 
-  async suggestDiff(_projectId: string, instruction: string): Promise<SuggestedPatch[]> {
+  async suggestDiff(
+    _projectId: string,
+    instruction: string,
+    files?: Array<{ path: string; content: string }>
+  ): Promise<SuggestedPatch[]> {
+    const context = files?.slice(0, 10) ?? [];
     const response = await fetch(`${this.url}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "qwen2.5:7b",
-        prompt: `Предложи diff в формате unified для инструкции: ${instruction}`
+        prompt: `Предложи diff в формате unified для инструкции: ${instruction}.\nТекущие файлы:${
+          context.length ? "\n" + JSON.stringify(context) : " отсутствуют"
+        }`
       })
     });
     if (!response.ok) {

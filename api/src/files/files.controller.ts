@@ -1,31 +1,51 @@
 import { Body, Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { IsString, IsUUID } from "class-validator";
 
 import { FilesService } from "./files.service";
+
+class ProjectParamDto {
+  @IsUUID()
+  projectId!: string;
+}
+
+class FileQueryDto {
+  @IsString()
+  path!: string;
+}
+
+class UpsertFileDto {
+  @IsString()
+  path!: string;
+
+  @IsString()
+  content!: string;
+}
 
 @Controller("api/projects/:projectId")
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Get("/files")
-  async list(@Param("projectId") projectId: string) {
-    return this.filesService.list(projectId);
+  async list(@Param() params: ProjectParamDto) {
+    const files = await this.filesService.list(params.projectId);
+    return files.map((file) => ({ path: file.path, updated_at: file.updated_at.toISOString() }));
   }
 
   @Get("/file")
-  async read(@Param("projectId") projectId: string, @Query("path") path: string) {
-    const file = await this.filesService.read(projectId, path);
-    return { content: file.content };
+  async read(@Param() params: ProjectParamDto, @Query() query: FileQueryDto) {
+    const file = await this.filesService.read(params.projectId, query.path);
+    return { content: file.content, updated_at: file.updated_at.toISOString() };
   }
 
   @Post("/file")
-  async save(@Param("projectId") projectId: string, @Body() body: { path: string; content: string }) {
-    await this.filesService.upsert(projectId, body.path, body.content);
-    return { ok: true };
+  async save(@Param() params: ProjectParamDto, @Body() body: UpsertFileDto) {
+    const file = await this.filesService.upsert(params.projectId, body.path, body.content);
+    return { path: file.path, updated_at: file.updated_at.toISOString() };
   }
 
   @Delete("/file")
-  async remove(@Param("projectId") projectId: string, @Query("path") path: string) {
-    await this.filesService.remove(projectId, path);
+  async remove(@Param() params: ProjectParamDto, @Query() query: FileQueryDto) {
+    await this.filesService.remove(params.projectId, query.path);
     return { ok: true };
   }
 }

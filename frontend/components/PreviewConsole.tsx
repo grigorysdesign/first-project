@@ -8,9 +8,10 @@ type TabKey = "preview" | "logs";
 
 interface PreviewConsoleProps {
   projectId: string;
+  onRun?: (runId: string) => void;
 }
 
-export function PreviewConsole({ projectId }: PreviewConsoleProps) {
+export function PreviewConsole({ projectId, onRun }: PreviewConsoleProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("preview");
   const [runUrl, setRunUrl] = useState<string | null>(null);
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null);
@@ -23,8 +24,10 @@ export function PreviewConsole({ projectId }: PreviewConsoleProps) {
     try {
       const run = await api.runProject({ projectId });
       setRunUrl(run.url);
+      setDeploymentUrl(null);
       setActiveTab("preview");
-      setLogs((prev) => `${prev}\nRun started: ${new Date().toLocaleTimeString()}`);
+      setLogs((prev) => `${prev}\nRun started (${run.runId}): ${new Date().toLocaleTimeString()}`);
+      onRun?.(run.runId);
     } catch (error) {
       console.error(error);
       setLogs((prev) => `${prev}\n${String(error)}`);
@@ -39,6 +42,7 @@ export function PreviewConsole({ projectId }: PreviewConsoleProps) {
     try {
       const deploy = await api.deployProject({ projectId });
       setDeploymentUrl(deploy.url);
+      setRunUrl(null);
       setActiveTab("preview");
       setLogs((prev) => `${prev}\nDeployment ready at ${deploy.url}`);
     } catch (error) {
@@ -53,9 +57,11 @@ export function PreviewConsole({ projectId }: PreviewConsoleProps) {
     setRunUrl(null);
     setDeploymentUrl(null);
     setLogs("Click Run to start the container\n");
+    setActiveTab("preview");
     let socket: Socket | null = null;
     if (projectId) {
-      socket = io(process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || "ws://localhost:8080");
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+      socket = io(baseUrl, { transports: ["websocket"] });
       socket.on(`logs:${projectId}`, (event: { message: string; timestamp: string }) => {
         setLogs((prev) => `${prev}\n[${new Date(event.timestamp).toLocaleTimeString()}] ${event.message}`);
       });

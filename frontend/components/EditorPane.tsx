@@ -32,6 +32,12 @@ export function EditorPane({ projectId, path }: EditorPaneProps) {
     void load();
   }, [projectId, path]);
 
+  useEffect(() => {
+    if (!path) {
+      setValue("// Select a file to start editing\n");
+    }
+  }, [path]);
+
   const language = useMemo(() => {
     if (!path) return "plaintext";
     if (path.endsWith(".ts") || path.endsWith(".tsx")) return "typescript";

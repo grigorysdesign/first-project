@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 
 interface AIChatPanelProps {
   projectId: string;
+  lastRunId?: string | null;
   onFilesUpdated?: () => void;
 }
 
@@ -13,7 +14,7 @@ interface Message {
   content: string;
 }
 
-export function AIChatPanel({ projectId, onFilesUpdated }: AIChatPanelProps) {
+export function AIChatPanel({ projectId, lastRunId, onFilesUpdated }: AIChatPanelProps) {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -29,8 +30,14 @@ export function AIChatPanel({ projectId, onFilesUpdated }: AIChatPanelProps) {
     setIsLoading(true);
     try {
       const result = await api.aiGenerate({ projectId, prompt: userMessage.content });
-      pushMessage({ role: "assistant", content: result.message });
-      onFilesUpdated?.();
+      const summary = result.files?.map((file) => `• ${file.path}`).join("\n") ?? "";
+      pushMessage({
+        role: "assistant",
+        content: summary ? `${result.message}\n${summary}` : result.message
+      });
+      if (result.files?.length) {
+        onFilesUpdated?.();
+      }
     } catch (error) {
       pushMessage({ role: "assistant", content: `Ошибка: ${String(error)}` });
     } finally {
@@ -46,8 +53,27 @@ export function AIChatPanel({ projectId, onFilesUpdated }: AIChatPanelProps) {
     setIsLoading(true);
     try {
       const result = await api.aiDiff({ projectId, instruction: userMessage.content });
-      pushMessage({ role: "assistant", content: result.message });
-      onFilesUpdated?.();
+      const summary = result.files?.map((file) => `• ${file.path}`).join("\n") ?? "";
+      pushMessage({
+        role: "assistant",
+        content: summary ? `${result.message}\n${summary}` : result.message
+      });
+      if (result.files?.length) {
+        onFilesUpdated?.();
+      }
+    } catch (error) {
+      pushMessage({ role: "assistant", content: `Ошибка: ${String(error)}` });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExplain = async () => {
+    if (!lastRunId) return;
+    setIsLoading(true);
+    try {
+      const result = await api.aiExplain({ projectId, runId: lastRunId });
+      pushMessage({ role: "assistant", content: result.explanation });
     } catch (error) {
       pushMessage({ role: "assistant", content: `Ошибка: ${String(error)}` });
     } finally {
@@ -80,7 +106,15 @@ export function AIChatPanel({ projectId, onFilesUpdated }: AIChatPanelProps) {
           className="h-20 w-full rounded border border-slate-800 bg-slate-950 p-2 text-sm text-slate-100 focus:border-brand-500 focus:outline-none"
           placeholder="Опишите, что нужно сделать..."
         />
-        <div className="mt-2 flex justify-end gap-2 text-xs">
+        <div className="mt-2 flex flex-wrap justify-end gap-2 text-xs">
+          <button
+            type="button"
+            onClick={handleExplain}
+            disabled={isLoading || !lastRunId}
+            className="rounded border border-slate-700 px-3 py-1 font-semibold text-slate-300 disabled:opacity-40"
+          >
+            Explain last run
+          </button>
           <button
             type="button"
             onClick={handleDiff}
