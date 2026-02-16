@@ -161,9 +161,12 @@ const App = {
 
   getMenuItems() {
     const openTasks = DB.getTasks().filter(t => t.status === 'open').length;
+    const todoCount = DB.getUserTodos(this.currentUser.id).filter(t => !t.isDone).length;
     const items = [
       { page: 'dashboard', label: 'Дашборд', icon: '⊞', permission: 'view_dashboard' },
+      { page: 'profile', label: 'Профиль', icon: '⊙', permission: 'view_dashboard' },
       { page: 'tasks', label: 'Задачи', icon: '☰', permission: 'view_dashboard', badge: openTasks || null },
+      { page: 'my-todos', label: 'Мои дела', icon: '✓', permission: 'view_dashboard', badge: todoCount || null },
       { page: 'news', label: 'Новости', icon: '⊕', permission: 'view_dashboard' },
       { page: 'knowledge', label: 'База знаний', icon: '⊘', permission: 'view_dashboard' },
       { page: 'rating', label: 'Рейтинг', icon: '★', permission: 'view_dashboard' },
@@ -181,7 +184,9 @@ const App = {
   renderHeader() {
     const titles = {
       dashboard: 'Дашборд',
+      profile: 'Мой профиль',
       tasks: 'Задачи',
+      'my-todos': 'Мои дела',
       news: 'Новости',
       knowledge: 'База знаний',
       rating: 'Рейтинг врачей',
@@ -213,9 +218,11 @@ const App = {
   renderPage() {
     switch (this.currentPage) {
       case 'dashboard': return this.renderDashboard();
+      case 'profile': return this.renderProfile();
       case 'tasks': return this.renderTasks();
       case 'task-detail': return this.renderTaskDetail();
       case 'create-task': return this.renderCreateTask();
+      case 'my-todos': return this.renderMyTodos();
       case 'news': return this.renderNews();
       case 'news-detail': return this.renderNewsDetail();
       case 'create-news': return this.renderCreateNews();
@@ -241,8 +248,29 @@ const App = {
     const leaderboard = DB.getLeaderboard().slice(0, 5);
     const news = DB.getNews().slice(0, 3);
 
+    const birthdays = DB.getTodayBirthdays();
+    const isSelfBirthday = birthdays.some(b => b.id === user.id);
+
     return `
       <div class="dashboard">
+        ${isSelfBirthday ? `
+          <div class="birthday-banner birthday-self">
+            <div class="birthday-icon">🎂</div>
+            <div class="birthday-text">
+              <h3>С Днём Рождения, ${user.name.split(' ')[1] || user.name.split(' ')[0]}!</h3>
+              <p>Коллектив ClinicHub поздравляет вас! Желаем здоровья, успехов и отличного настроения!</p>
+            </div>
+          </div>
+        ` : ''}
+        ${birthdays.filter(b => b.id !== user.id).length > 0 ? `
+          <div class="birthday-banner">
+            <div class="birthday-icon">🎉</div>
+            <div class="birthday-text">
+              <h3>Сегодня День Рождения!</h3>
+              <p>Поздравляем: ${birthdays.filter(b => b.id !== user.id).map(b => `<strong>${b.name}</strong> (${b.specialty})`).join(', ')}</p>
+            </div>
+          </div>
+        ` : ''}
         <div class="stats-grid">
           <div class="stat-card stat-blue">
             <div class="stat-icon">★</div>
@@ -416,6 +444,8 @@ const App = {
     const canComplete = task.assignedTo === user.id && task.status === 'in_progress';
     const canReview = task.status === 'review' && (this.hasPermission('edit_tasks'));
     const canDelete = this.hasPermission('delete_tasks');
+    const attachments = DB.getTaskAttachments(task.id);
+    const canUpload = task.assignedTo === user.id || this.hasPermission('edit_tasks');
 
     return `
       <div class="detail-page">
@@ -432,15 +462,53 @@ const App = {
             <span>Дата: ${this.formatDate(task.createdAt)}</span>
             ${task.deadline ? `<span>Дедлайн: ${this.formatDate(task.deadline)}</span>` : ''}
             ${assignee ? `<span>Исполнитель: ${assignee.name}</span>` : ''}
+            ${task.estimatedHours ? `<span>Оценка: ${task.estimatedHours} ч.</span>` : ''}
+            ${task.actualHours ? `<span>Факт: ${task.actualHours} ч.</span>` : ''}
           </div>
           <div class="detail-reward">
             <span class="reward-label">Награда:</span>
             <span class="reward-value">${task.reward} ◆ Ист Коинов</span>
           </div>
+          ${(task.tags && task.tags.length > 0) ? `
+            <div class="kb-tags" style="margin-bottom:16px;">
+              ${task.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+            </div>
+          ` : ''}
           <div class="detail-description">
             <h4>Описание</h4>
             <p>${task.description}</p>
           </div>
+          ${task.notes ? `
+            <div class="detail-description">
+              <h4>Заметки</h4>
+              <p>${task.notes}</p>
+            </div>
+          ` : ''}
+
+          <div class="task-attachments-section">
+            <h4>Вложения (${attachments.length})</h4>
+            ${attachments.length > 0 ? `
+              <div class="attachments-list">
+                ${attachments.map(a => `
+                  <div class="attachment-item">
+                    <span class="attachment-icon">${this.getFileIcon(a.fileType)}</span>
+                    <div class="attachment-info">
+                      <a href="${a.fileUrl}" target="_blank" class="attachment-name">${a.fileName}</a>
+                      <span class="attachment-size">${this.formatFileSize(a.fileSize)}</span>
+                    </div>
+                    ${(a.uploadedBy === user.id || canDelete) ? `<button class="btn btn-sm btn-ghost" data-delete-attachment="${a.id}">✕</button>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            ` : '<p class="empty-text">Нет вложений</p>'}
+            ${canUpload && task.status !== 'completed' ? `
+              <div class="attachment-upload">
+                <label class="btn btn-sm btn-ghost" for="taskFileInput">+ Загрузить файл</label>
+                <input type="file" id="taskFileInput" class="hidden" multiple>
+              </div>
+            ` : ''}
+          </div>
+
           <div class="detail-actions">
             ${canTake ? `<button class="btn btn-primary" id="takeTaskBtn" data-id="${task.id}">Взять задачу</button>` : ''}
             ${canComplete ? `<button class="btn btn-success" id="submitTaskBtn" data-id="${task.id}">Отправить на проверку</button>` : ''}
@@ -495,6 +563,20 @@ const App = {
                 <label>Дедлайн</label>
                 <input type="date" id="taskDeadline">
               </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Оценка времени (часов)</label>
+                <input type="number" id="taskEstimatedHours" min="0.5" max="100" step="0.5" placeholder="Например: 4">
+              </div>
+              <div class="form-group">
+                <label>Теги (через запятую)</label>
+                <input type="text" id="taskTags" placeholder="хирургия, срочное, отчёт">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Дополнительные заметки</label>
+              <textarea id="taskNotes" rows="3" placeholder="Заметки к задаче..."></textarea>
             </div>
             <button type="submit" class="btn btn-primary">Создать задачу</button>
           </form>
@@ -718,6 +800,175 @@ const App = {
     `;
   },
 
+  // ============ PROFILE ============
+  renderProfile() {
+    const user = this.currentUser;
+    const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2);
+    const tasks = DB.getTasks().filter(t => t.assignedTo === user.id);
+    const completed = tasks.filter(t => t.status === 'completed').length;
+    const ratings = DB.getUserRatings(user.id);
+    const avgRating = DB.getAverageRating(user.id) || user.rating;
+
+    return `
+      <div class="profile-page">
+        <div class="profile-header-card">
+          <div class="profile-avatar-section">
+            <div class="profile-avatar ${user.avatar ? 'has-image' : ''}">
+              ${user.avatar ? `<img src="${user.avatar}" alt="Аватар">` : `<span>${initials}</span>`}
+            </div>
+            <label class="btn btn-sm btn-ghost profile-upload-btn" for="avatarInput">Сменить фото</label>
+            <input type="file" id="avatarInput" accept="image/*" class="hidden">
+          </div>
+          <div class="profile-info">
+            <h2>${user.name}</h2>
+            <p class="profile-role">${DB.ROLE_LABELS[user.role]} — ${user.specialty}</p>
+            <div class="profile-stats">
+              <div class="profile-stat">
+                <span class="profile-stat-value">${avgRating.toFixed(1)}</span>
+                <span class="profile-stat-label">Рейтинг</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-value">${user.coins}</span>
+                <span class="profile-stat-label">Ист Коинов</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-value">${completed}</span>
+                <span class="profile-stat-label">Задач</span>
+              </div>
+              <div class="profile-stat">
+                <span class="profile-stat-value">${ratings.length}</span>
+                <span class="profile-stat-label">Отзывов</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-grid">
+          <div class="card">
+            <div class="card-header"><h3>Личные данные</h3></div>
+            <div class="card-body">
+              <form id="profileForm" class="form">
+                <div class="form-group">
+                  <label>ФИО</label>
+                  <input type="text" id="profileName" value="${user.name}" required>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Телефон</label>
+                    <input type="text" id="profilePhone" value="${user.phone || ''}" placeholder="+7 (999) 123-45-67">
+                  </div>
+                  <div class="form-group">
+                    <label>Email</label>
+                    <input type="text" id="profileEmail" value="${user.email || ''}" placeholder="email@clinic.ru">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Специальность</label>
+                    <input type="text" id="profileSpecialty" value="${user.specialty || ''}">
+                  </div>
+                  <div class="form-group">
+                    <label>Дата рождения</label>
+                    <input type="date" id="profileBirthday" value="${user.birthday || ''}">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>О себе</label>
+                  <textarea id="profileBio" rows="3" placeholder="Расскажите о себе...">${user.bio || ''}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Сохранить изменения</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3>Отзывы коллег</h3></div>
+            <div class="card-body">
+              ${ratings.length === 0
+                ? '<p class="empty-text">Пока нет отзывов</p>'
+                : ratings.map(r => {
+                    const reviewer = DB.getUserById(r.ratedBy);
+                    return `
+                      <div class="review-item">
+                        <div class="review-header">
+                          <strong>${reviewer?.name.split(' ').slice(0, 2).join(' ') || 'Аноним'}</strong>
+                          <span class="rating-stars">${this.renderStars(r.score)}</span>
+                        </div>
+                        ${r.comment ? `<p class="review-text">${r.comment}</p>` : ''}
+                        <span class="review-date">${this.formatDate(r.createdAt)}</span>
+                      </div>
+                    `;
+                  }).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // ============ MY TODOS ============
+  renderMyTodos() {
+    const user = this.currentUser;
+    const todos = DB.getUserTodos(user.id);
+    const active = todos.filter(t => !t.isDone);
+    const done = todos.filter(t => t.isDone);
+    const filter = this.params.todoFilter || 'active';
+
+    const list = filter === 'done' ? done : filter === 'all' ? todos : active;
+
+    return `
+      <div class="todos-page">
+        <div class="page-actions">
+          <div class="filter-tabs">
+            <button class="tab ${filter === 'active' ? 'active' : ''}" data-todo-filter="active">Активные (${active.length})</button>
+            <button class="tab ${filter === 'done' ? 'active' : ''}" data-todo-filter="done">Выполненные (${done.length})</button>
+            <button class="tab ${filter === 'all' ? 'active' : ''}" data-todo-filter="all">Все (${todos.length})</button>
+          </div>
+        </div>
+
+        <div class="todo-add-card card">
+          <div class="card-body">
+            <form id="addTodoForm" class="todo-add-form">
+              <input type="text" id="todoTitle" placeholder="Что нужно сделать?" required class="todo-input">
+              <input type="text" id="todoDesc" placeholder="Описание (необязательно)" class="todo-input-desc">
+              <div class="todo-add-row">
+                <select id="todoPriority" class="todo-select">
+                  <option value="low">Низкий</option>
+                  <option value="medium" selected>Средний</option>
+                  <option value="high">Высокий</option>
+                </select>
+                <input type="date" id="todoDueDate" class="todo-date">
+                <button type="submit" class="btn btn-primary btn-sm">Добавить</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="todos-list">
+          ${list.length === 0
+            ? '<div class="empty-state"><p>Нет задач</p></div>'
+            : list.map(t => `
+              <div class="todo-item ${t.isDone ? 'todo-done' : ''} todo-priority-${t.priority}">
+                <label class="todo-checkbox">
+                  <input type="checkbox" ${t.isDone ? 'checked' : ''} data-todo-toggle="${t.id}">
+                  <span class="todo-checkmark"></span>
+                </label>
+                <div class="todo-content">
+                  <div class="todo-title">${t.title}</div>
+                  ${t.description ? `<div class="todo-desc">${t.description}</div>` : ''}
+                  <div class="todo-meta">
+                    <span class="task-priority priority-${t.priority}">${t.priority === 'high' ? 'Высокий' : t.priority === 'medium' ? 'Средний' : 'Низкий'}</span>
+                    ${t.dueDate ? `<span class="todo-due ${new Date(t.dueDate) < new Date() && !t.isDone ? 'overdue' : ''}">${this.formatDate(t.dueDate)}</span>` : ''}
+                  </div>
+                </div>
+                <button class="btn btn-sm btn-ghost todo-delete" data-todo-delete="${t.id}">✕</button>
+              </div>
+            `).join('')}
+        </div>
+      </div>
+    `;
+  },
+
   // ============ RATING ============
   renderRating() {
     const leaderboard = DB.getLeaderboard();
@@ -762,24 +1013,60 @@ const App = {
                   <th>Врач</th>
                   <th>Специальность</th>
                   <th>Рейтинг</th>
+                  <th>Отзывов</th>
                   <th>Задач</th>
                   <th>Ист Коины</th>
+                  <th>Оценить</th>
                 </tr>
               </thead>
               <tbody>
-                ${leaderboard.map(u => `
-                  <tr class="${u.id === user.id ? 'highlight-row' : ''}">
-                    <td><span class="leader-rank ${u.rank <= 3 ? 'top-' + u.rank : ''}">#${u.rank}</span></td>
-                    <td>${u.name}</td>
-                    <td>${u.specialty}</td>
-                    <td>${this.renderStars(u.rating)} ${u.rating.toFixed(1)}</td>
-                    <td>${u.tasksCompleted}</td>
-                    <td><strong>${u.coins} ◆</strong></td>
-                  </tr>
-                `).join('')}
+                ${leaderboard.map(u => {
+                  const reviewCount = DB.getUserRatings(u.id).length;
+                  const myReview = DB.getUserRatings(u.id).find(r => r.ratedBy === user.id);
+                  return `
+                    <tr class="${u.id === user.id ? 'highlight-row' : ''}">
+                      <td><span class="leader-rank ${u.rank <= 3 ? 'top-' + u.rank : ''}">#${u.rank}</span></td>
+                      <td>${u.name}</td>
+                      <td>${u.specialty}</td>
+                      <td>${this.renderStars(u.rating)} ${u.rating.toFixed(1)}</td>
+                      <td>${reviewCount}</td>
+                      <td>${u.tasksCompleted}</td>
+                      <td><strong>${u.coins} ◆</strong></td>
+                      <td>
+                        ${u.id !== user.id ? `
+                          <button class="btn btn-sm btn-ghost rate-user-btn" data-user-id="${u.id}" data-user-name="${u.name}">${myReview ? 'Изменить' : 'Оценить'}</button>
+                        ` : '—'}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+      <div id="ratingModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+          <h3 id="ratingModalTitle">Оценить врача</h3>
+          <form id="rateUserForm" class="form">
+            <input type="hidden" id="rateUserId">
+            <div class="form-group">
+              <label>Оценка</label>
+              <div class="star-picker" id="starPicker">
+                ${[1,2,3,4,5].map(i => `<span class="star-pick" data-score="${i}">☆</span>`).join('')}
+              </div>
+              <input type="hidden" id="rateScore" value="0">
+            </div>
+            <div class="form-group">
+              <label>Комментарий (необязательно)</label>
+              <textarea id="rateComment" rows="3" placeholder="Ваш отзыв..."></textarea>
+            </div>
+            <div class="detail-actions">
+              <button type="submit" class="btn btn-primary">Отправить оценку</button>
+              <button type="button" class="btn btn-ghost" id="closeRatingModal">Отмена</button>
+            </div>
+          </form>
         </div>
       </div>
     `;
@@ -1065,6 +1352,9 @@ const App = {
     // Create task form
     document.getElementById('createTaskForm')?.addEventListener('submit', (e) => {
       e.preventDefault();
+      const tagsVal = document.getElementById('taskTags')?.value || '';
+      const tags = tagsVal.split(',').map(t => t.trim()).filter(Boolean);
+      const estHours = document.getElementById('taskEstimatedHours')?.value;
       DB.addTask({
         title: document.getElementById('taskTitle').value,
         description: document.getElementById('taskDesc').value,
@@ -1072,6 +1362,10 @@ const App = {
         priority: document.getElementById('taskPriority').value,
         reward: parseInt(document.getElementById('taskReward').value),
         deadline: document.getElementById('taskDeadline').value || null,
+        estimatedHours: estHours ? parseFloat(estHours) : null,
+        actualHours: null,
+        tags: tags,
+        notes: document.getElementById('taskNotes')?.value || null,
         status: 'open',
         assignedTo: null,
         createdBy: this.currentUser.id,
@@ -1140,6 +1434,150 @@ const App = {
       });
     });
 
+    // Profile form
+    document.getElementById('profileForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const updates = {
+        name: document.getElementById('profileName').value,
+        phone: document.getElementById('profilePhone').value || null,
+        email: document.getElementById('profileEmail').value || null,
+        specialty: document.getElementById('profileSpecialty').value,
+        birthday: document.getElementById('profileBirthday').value || null,
+        bio: document.getElementById('profileBio').value || null
+      };
+      DB.updateUser(this.currentUser.id, updates);
+      this.currentUser = DB.getUserById(this.currentUser.id);
+      this.navigate('profile');
+    });
+
+    // Avatar upload
+    document.getElementById('avatarInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = await DB.uploadAvatar(this.currentUser.id, file);
+      if (url) {
+        this.currentUser = DB.getUserById(this.currentUser.id);
+        this.render();
+      }
+    });
+
+    // Task file upload
+    document.getElementById('taskFileInput')?.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      if (!files.length) return;
+      const taskId = this.params.id;
+      for (const file of files) {
+        await DB.uploadTaskFile(taskId, file, this.currentUser.id);
+      }
+      this.navigate('task-detail', { id: taskId });
+    });
+
+    // Delete attachment
+    document.querySelectorAll('[data-delete-attachment]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Удалить вложение?')) {
+          DB.deleteTaskAttachment(btn.dataset.deleteAttachment);
+          this.navigate('task-detail', { id: this.params.id });
+        }
+      });
+    });
+
+    // Todo filters
+    document.querySelectorAll('[data-todo-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.params.todoFilter = btn.dataset.todoFilter;
+        this.render();
+      });
+    });
+
+    // Add todo
+    document.getElementById('addTodoForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      DB.addTodo({
+        userId: this.currentUser.id,
+        title: document.getElementById('todoTitle').value,
+        description: document.getElementById('todoDesc').value || null,
+        priority: document.getElementById('todoPriority').value,
+        isDone: false,
+        dueDate: document.getElementById('todoDueDate').value || null,
+        createdAt: new Date().toISOString(),
+        completedAt: null
+      });
+      this.render();
+    });
+
+    // Toggle todo
+    document.querySelectorAll('[data-todo-toggle]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.dataset.todoToggle;
+        const isDone = cb.checked;
+        DB.updateTodo(id, {
+          isDone,
+          completedAt: isDone ? new Date().toISOString() : null
+        });
+        this.render();
+      });
+    });
+
+    // Delete todo
+    document.querySelectorAll('[data-todo-delete]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        DB.deleteTodo(btn.dataset.todoDelete);
+        this.render();
+      });
+    });
+
+    // Rate user modal
+    document.querySelectorAll('.rate-user-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const modal = document.getElementById('ratingModal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          document.getElementById('rateUserId').value = btn.dataset.userId;
+          document.getElementById('ratingModalTitle').textContent = `Оценить: ${btn.dataset.userName}`;
+          // Reset stars
+          document.querySelectorAll('.star-pick').forEach(s => s.textContent = '☆');
+          document.getElementById('rateScore').value = '0';
+          document.getElementById('rateComment').value = '';
+        }
+      });
+    });
+
+    // Star picker
+    document.querySelectorAll('.star-pick').forEach(star => {
+      star.addEventListener('click', () => {
+        const score = parseInt(star.dataset.score);
+        document.getElementById('rateScore').value = score;
+        document.querySelectorAll('.star-pick').forEach(s => {
+          s.textContent = parseInt(s.dataset.score) <= score ? '★' : '☆';
+        });
+      });
+    });
+
+    // Close rating modal
+    document.getElementById('closeRatingModal')?.addEventListener('click', () => {
+      document.getElementById('ratingModal')?.classList.add('hidden');
+    });
+    document.querySelector('#ratingModal .modal-overlay')?.addEventListener('click', () => {
+      document.getElementById('ratingModal')?.classList.add('hidden');
+    });
+
+    // Submit rating
+    document.getElementById('rateUserForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const score = parseInt(document.getElementById('rateScore').value);
+      if (score < 1 || score > 5) { alert('Выберите оценку от 1 до 5'); return; }
+      DB.addUserRating({
+        userId: document.getElementById('rateUserId').value,
+        ratedBy: this.currentUser.id,
+        score,
+        comment: document.getElementById('rateComment').value || null,
+        createdAt: new Date().toISOString().split('T')[0]
+      });
+      document.getElementById('ratingModal')?.classList.add('hidden');
+      this.render();
+    });
+
     // Add user button
     document.getElementById('addUserBtn')?.addEventListener('click', () => {
       const name = prompt('ФИО нового пользователя:');
@@ -1164,6 +1602,23 @@ const App = {
   },
 
   // ============ HELPERS ============
+  getFileIcon(mimeType) {
+    if (!mimeType) return '📄';
+    if (mimeType.startsWith('image/')) return '🖼️';
+    if (mimeType.includes('pdf')) return '📕';
+    if (mimeType.includes('word') || mimeType.includes('document')) return '📘';
+    if (mimeType.includes('sheet') || mimeType.includes('excel')) return '📗';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📙';
+    return '📄';
+  },
+
+  formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' КБ';
+    return (bytes / 1048576).toFixed(1) + ' МБ';
+  },
+
   formatDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);

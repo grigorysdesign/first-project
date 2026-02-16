@@ -121,11 +121,71 @@ CREATE INDEX idx_news_created      ON news(created_at DESC);
 CREATE INDEX idx_kb_category       ON knowledge_base(category);
 
 -- =====================
+-- 7. ПЕРСОНАЛЬНЫЕ ЗАДАЧИ (To-Do List)
+-- =====================
+CREATE TABLE user_todos (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(300) NOT NULL,
+    description TEXT,
+    priority    VARCHAR(10)  NOT NULL DEFAULT 'medium'
+                CHECK (priority IN ('low', 'medium', 'high')),
+    is_done     BOOLEAN      NOT NULL DEFAULT FALSE,
+    due_date    DATE,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    completed_at TIMESTAMP
+);
+CREATE INDEX idx_user_todos_user ON user_todos(user_id);
+
+-- =====================
+-- 8. ВЛОЖЕНИЯ К ЗАДАЧАМ
+-- =====================
+CREATE TABLE task_attachments (
+    id          SERIAL PRIMARY KEY,
+    task_id     INTEGER      NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    file_name   VARCHAR(255) NOT NULL,
+    file_url    TEXT         NOT NULL,
+    file_size   INTEGER      NOT NULL DEFAULT 0,
+    file_type   VARCHAR(100),
+    uploaded_by INTEGER      NOT NULL REFERENCES users(id),
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_task_attachments_task ON task_attachments(task_id);
+
+-- =====================
+-- 9. РЕЙТИНГ / ОТЗЫВЫ
+-- =====================
+CREATE TABLE user_ratings (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rated_by    INTEGER      NOT NULL REFERENCES users(id),
+    score       INTEGER      NOT NULL CHECK (score BETWEEN 1 AND 5),
+    comment     TEXT,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, rated_by)
+);
+CREATE INDEX idx_user_ratings_user ON user_ratings(user_id);
+
+-- =====================
+-- Добавление поля birthday в users
+-- =====================
+ALTER TABLE users ADD COLUMN birthday DATE;
+ALTER TABLE users ADD COLUMN phone VARCHAR(20);
+ALTER TABLE users ADD COLUMN email VARCHAR(150);
+ALTER TABLE users ADD COLUMN bio TEXT;
+
+-- Добавление дополнительных полей в tasks
+ALTER TABLE tasks ADD COLUMN estimated_hours NUMERIC(5,1);
+ALTER TABLE tasks ADD COLUMN actual_hours NUMERIC(5,1);
+ALTER TABLE tasks ADD COLUMN tags TEXT[];
+ALTER TABLE tasks ADD COLUMN notes TEXT;
+
+-- =====================
 -- НАЧАЛЬНЫЕ ДАННЫЕ
 -- =====================
-INSERT INTO users (login, password, name, role, specialty, coins, rating, tasks_completed) VALUES
-    ('admin',   '$2b$10$ХЕШПАРОЛЯ', 'Иванов Сергей Петрович',       'admin',       'Администрация', 0,   0.0, 0),
-    ('head',    '$2b$10$ХЕШПАРОЛЯ', 'Петрова Анна Михайловна',       'head_doctor', 'Кардиология',   500, 4.8, 45),
-    ('doctor',  '$2b$10$ХЕШПАРОЛЯ', 'Сидоров Алексей Николаевич',    'doctor',      'Терапия',       320, 4.5, 28),
-    ('doctor2', '$2b$10$ХЕШПАРОЛЯ', 'Козлова Мария Ивановна',        'doctor',      'Неврология',    180, 4.2, 15),
-    ('intern',  '$2b$10$ХЕШПАРОЛЯ', 'Новиков Дмитрий Александрович', 'intern',      'Хирургия',      50,  3.8, 5);
+INSERT INTO users (login, password, name, role, specialty, coins, rating, tasks_completed, birthday) VALUES
+    ('admin',   '$2b$10$ХЕШПАРОЛЯ', 'Иванов Сергей Петрович',       'admin',       'Администрация', 0,   0.0, 0,  '1980-03-15'),
+    ('head',    '$2b$10$ХЕШПАРОЛЯ', 'Петрова Анна Михайловна',       'head_doctor', 'Кардиология',   500, 4.8, 45, '1975-07-22'),
+    ('doctor',  '$2b$10$ХЕШПАРОЛЯ', 'Сидоров Алексей Николаевич',    'doctor',      'Терапия',       320, 4.5, 28, '1985-02-16'),
+    ('doctor2', '$2b$10$ХЕШПАРОЛЯ', 'Козлова Мария Ивановна',        'doctor',      'Неврология',    180, 4.2, 15, '1990-11-08'),
+    ('intern',  '$2b$10$ХЕШПАРОЛЯ', 'Новиков Дмитрий Александрович', 'intern',      'Хирургия',      50,  3.8, 5,  '1998-06-30');
