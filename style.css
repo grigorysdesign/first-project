@@ -838,4 +838,228 @@ a:hover { text-decoration: underline; }
   .page-actions { flex-direction: column; align-items: flex-start; }
   .users-table { font-size: 12px; }
   .users-table th, .users-table td { padding: 8px; }
+  .profile-header-card { flex-direction: column; text-align: center; }
+  .profile-avatar-section { justify-content: center; }
+  .profile-stats { flex-wrap: wrap; justify-content: center; }
+  .profile-grid { grid-template-columns: 1fr; }
+  .todo-add-row { flex-direction: column; }
+  .birthday-banner { flex-direction: column; text-align: center; }
 }
+
+/* ============ BIRTHDAY BANNER ============ */
+.birthday-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 2px solid #f59e0b;
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+}
+.birthday-banner.birthday-self {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-color: var(--primary);
+}
+.birthday-icon { font-size: 40px; flex-shrink: 0; }
+.birthday-text h3 { font-size: 18px; color: var(--gray-900); margin-bottom: 4px; }
+.birthday-text p { font-size: 14px; color: var(--gray-600); }
+
+/* ============ PROFILE PAGE ============ */
+.profile-page { max-width: 1000px; }
+
+.profile-header-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+.profile-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-upload-btn { cursor: pointer; }
+
+.profile-info { flex: 1; }
+.profile-info h2 { font-size: 24px; margin-bottom: 4px; }
+.profile-role { font-size: 14px; color: var(--gray-500); margin-bottom: 16px; }
+
+.profile-stats {
+  display: flex;
+  gap: 32px;
+}
+.profile-stat { text-align: center; }
+.profile-stat-value { font-size: 24px; font-weight: 700; color: var(--gray-900); display: block; }
+.profile-stat-label { font-size: 12px; color: var(--gray-500); }
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Reviews */
+.review-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.review-item:last-child { border-bottom: none; }
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.review-text { font-size: 14px; color: var(--gray-600); margin: 4px 0; }
+.review-date { font-size: 12px; color: var(--gray-400); }
+
+/* ============ TO-DO LIST ============ */
+.todos-page { max-width: 800px; }
+
+.todo-add-card { margin-bottom: 20px; }
+.todo-add-form .todo-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  outline: none;
+  transition: var(--transition);
+  margin-bottom: 8px;
+}
+.todo-add-form .todo-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.todo-add-form .todo-input-desc {
+  width: 100%;
+  padding: 8px 16px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  outline: none;
+  transition: var(--transition);
+  margin-bottom: 8px;
+  color: var(--gray-500);
+}
+.todo-add-form .todo-input-desc:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+.todo-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.todo-select, .todo-date {
+  padding: 6px 12px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  outline: none;
+  background: white;
+}
+
+.todos-list { display: flex; flex-direction: column; gap: 8px; }
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  border-left: 3px solid var(--gray-300);
+}
+.todo-item:hover { box-shadow: var(--shadow); }
+.todo-item.todo-done { opacity: 0.6; background: var(--gray-50); }
+.todo-item.todo-done .todo-title { text-decoration: line-through; color: var(--gray-400); }
+.todo-item.todo-priority-high { border-left-color: var(--danger); }
+.todo-item.todo-priority-medium { border-left-color: var(--warning); }
+.todo-item.todo-priority-low { border-left-color: var(--success); }
+
+.todo-checkbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding-top: 2px;
+}
+.todo-checkbox input { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
+
+.todo-content { flex: 1; min-width: 0; }
+.todo-title { font-size: 15px; font-weight: 500; color: var(--gray-800); }
+.todo-desc { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+.todo-meta { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.todo-due { font-size: 12px; color: var(--gray-400); }
+.todo-due.overdue { color: var(--danger); font-weight: 600; }
+.todo-delete { opacity: 0.4; transition: var(--transition); }
+.todo-delete:hover { opacity: 1; color: var(--danger); }
+
+/* ============ TASK ATTACHMENTS ============ */
+.task-attachments-section {
+  margin: 20px 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--gray-100);
+}
+.task-attachments-section h4 { font-size: 16px; margin-bottom: 12px; }
+
+.attachments-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gray-200);
+}
+.attachment-icon { font-size: 20px; flex-shrink: 0; }
+.attachment-info { flex: 1; min-width: 0; }
+.attachment-name { font-size: 14px; font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-size { font-size: 12px; color: var(--gray-400); }
+.attachment-upload { margin-top: 8px; }
+
+/* ============ STAR PICKER ============ */
+.star-picker {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0;
+}
+.star-pick {
+  font-size: 28px;
+  color: #f59e0b;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  user-select: none;
+}
+.star-pick:hover { transform: scale(1.2); }
