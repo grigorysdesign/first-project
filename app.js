@@ -7,7 +7,7 @@ const App = {
   currentUser: null,
 
   init() {
-    DB.init();
+    // DB.init() теперь вызывается снаружи (async)
     this.currentUser = DB.getCurrentUser();
     if (this.currentUser) {
       this.navigate('dashboard');
@@ -1193,4 +1193,7 @@ const App = {
 };
 
 // Start the app
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', async () => {
+  await DB.init();
+  App.init();
+});
