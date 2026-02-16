@@ -1,14 +1,25 @@
 // ============================================
-// Database & Data Layer - Doctor Clinic Platform
+// Database & Data Layer - Supabase Edition
 // ============================================
 
+// ⚠️ ЗАМЕНИ ЭТИ ЗНАЧЕНИЯ НА СВОИ (из Supabase → Settings → API)
+const SUPABASE_URL = 'https://ihlecobbuzeuhwstryqn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlobGVjb2JidXpldWh3c3RyeXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNTU3OTcsImV4cCI6MjA4NjgzMTc5N30.H4MQGWg2ixJaT2qgVGlOTOjCTR8Xmwc6uP4msrfiEcg';
+
+// Инициализация Supabase-клиента
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const DB = {
-  KEY_USERS: 'clinic_users',
-  KEY_TASKS: 'clinic_tasks',
-  KEY_NEWS: 'clinic_news',
-  KEY_KB: 'clinic_knowledge_base',
+  // Кеш данных в памяти (загружается при старте)
+  _cache: {
+    users: [],
+    tasks: [],
+    news: [],
+    kb: [],
+    transactions: []
+  },
+
   KEY_SESSION: 'clinic_session',
-  KEY_TRANSACTIONS: 'clinic_transactions',
 
   // Access Levels
   ROLES: {
@@ -82,405 +93,276 @@ const DB = {
     faq: 'Часто задаваемые вопросы'
   },
 
-  // Initialize default data
-  init() {
-    if (!localStorage.getItem(this.KEY_USERS)) {
-      const defaultUsers = [
-        {
-          id: 'u1',
-          login: 'admin',
-          password: 'admin123',
-          name: 'Иванов Сергей Петрович',
-          role: 'admin',
-          specialty: 'Администрация',
-          coins: 0,
-          rating: 0,
-          tasksCompleted: 0,
-          avatar: null,
-          createdAt: '2025-01-15'
-        },
-        {
-          id: 'u2',
-          login: 'head',
-          password: 'head123',
-          name: 'Петрова Анна Михайловна',
-          role: 'head_doctor',
-          specialty: 'Кардиология',
-          coins: 500,
-          rating: 4.8,
-          tasksCompleted: 45,
-          avatar: null,
-          createdAt: '2025-01-20'
-        },
-        {
-          id: 'u3',
-          login: 'doctor',
-          password: 'doctor123',
-          name: 'Сидоров Алексей Николаевич',
-          role: 'doctor',
-          specialty: 'Терапия',
-          coins: 320,
-          rating: 4.5,
-          tasksCompleted: 28,
-          avatar: null,
-          createdAt: '2025-02-01'
-        },
-        {
-          id: 'u4',
-          login: 'doctor2',
-          password: 'doctor123',
-          name: 'Козлова Мария Ивановна',
-          role: 'doctor',
-          specialty: 'Неврология',
-          coins: 180,
-          rating: 4.2,
-          tasksCompleted: 15,
-          avatar: null,
-          createdAt: '2025-02-10'
-        },
-        {
-          id: 'u5',
-          login: 'intern',
-          password: 'intern123',
-          name: 'Новиков Дмитрий Александрович',
-          role: 'intern',
-          specialty: 'Хирургия',
-          coins: 50,
-          rating: 3.8,
-          tasksCompleted: 5,
-          avatar: null,
-          createdAt: '2025-03-01'
-        }
-      ];
-      localStorage.setItem(this.KEY_USERS, JSON.stringify(defaultUsers));
-    }
+  // ============================================
+  // Инициализация — загрузка всех данных из Supabase
+  // ============================================
+  async init() {
+    console.log('🔄 Загрузка данных из Supabase...');
 
-    if (!localStorage.getItem(this.KEY_TASKS)) {
-      const defaultTasks = [
-        {
-          id: 't1',
-          title: 'Провести консультацию пациента с гипертонией',
-          description: 'Необходимо провести первичную консультацию пациента, назначить обследования и составить план лечения. Включает измерение АД, сбор анамнеза и выдачу рекомендаций.',
-          category: 'consultation',
-          reward: 50,
-          status: 'open',
-          priority: 'high',
-          assignedTo: null,
-          createdBy: 'u2',
-          createdAt: '2026-02-10',
-          deadline: '2026-02-20',
-          completedAt: null
-        },
-        {
-          id: 't2',
-          title: 'Подготовить отчёт по клиническим исследованиям',
-          description: 'Составить сводный отчёт по результатам клинических исследований за последний квартал. Включить статистику, выводы и рекомендации по улучшению протоколов.',
-          category: 'research',
-          reward: 120,
-          status: 'open',
-          priority: 'medium',
-          assignedTo: null,
-          createdBy: 'u1',
-          createdAt: '2026-02-08',
-          deadline: '2026-02-28',
-          completedAt: null
-        },
-        {
-          id: 't3',
-          title: 'Провести обучение интернов по УЗИ-диагностике',
-          description: 'Организовать и провести практическое занятие для интернов по основам ультразвуковой диагностики. Подготовить материалы и провести тестирование.',
-          category: 'training',
-          reward: 80,
-          status: 'in_progress',
-          priority: 'medium',
-          assignedTo: 'u3',
-          createdBy: 'u2',
-          createdAt: '2026-02-05',
-          deadline: '2026-02-18',
-          completedAt: null
-        },
-        {
-          id: 't4',
-          title: 'Наставничество нового врача в отделении',
-          description: 'Курировать работу нового врача в течение недели: помощь с пациентами, объяснение внутренних процессов, контроль качества.',
-          category: 'mentoring',
-          reward: 100,
-          status: 'open',
-          priority: 'low',
-          assignedTo: null,
-          createdBy: 'u2',
-          createdAt: '2026-02-12',
-          deadline: '2026-03-01',
-          completedAt: null
-        },
-        {
-          id: 't5',
-          title: 'Обновить протокол лечения ОРВИ',
-          description: 'Актуализировать клинический протокол лечения ОРВИ в соответствии с последними рекомендациями Минздрава. Согласовать с заведующим.',
-          category: 'documentation',
-          reward: 70,
-          status: 'open',
-          priority: 'high',
-          assignedTo: null,
-          createdBy: 'u1',
-          createdAt: '2026-02-14',
-          deadline: '2026-02-25',
-          completedAt: null
-        },
-        {
-          id: 't6',
-          title: 'Дежурство в приёмном отделении',
-          description: 'Экстренное дежурство в приёмном отделении в выходные. Приём и первичная сортировка пациентов.',
-          category: 'emergency',
-          reward: 200,
-          status: 'open',
-          priority: 'high',
-          assignedTo: null,
-          createdBy: 'u1',
-          createdAt: '2026-02-15',
-          deadline: '2026-02-17',
-          completedAt: null
-        },
-        {
-          id: 't7',
-          title: 'Анализ эффективности нового препарата',
-          description: 'Провести ретроспективный анализ эффективности нового кардиопрепарата на основе данных пациентов за 3 месяца.',
-          category: 'research',
-          reward: 150,
-          status: 'completed',
-          priority: 'medium',
-          assignedTo: 'u3',
-          createdBy: 'u2',
-          createdAt: '2026-01-15',
-          deadline: '2026-02-15',
-          completedAt: '2026-02-13'
-        }
-      ];
-      localStorage.setItem(this.KEY_TASKS, JSON.stringify(defaultTasks));
-    }
+    try {
+      // Загружаем все таблицы параллельно
+      const [usersRes, tasksRes, newsRes, kbRes, transRes] = await Promise.all([
+        supabase.from('users').select('*'),
+        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+        supabase.from('news').select('*').order('created_at', { ascending: false }),
+        supabase.from('knowledge_base').select('*'),
+        supabase.from('transactions').select('*').order('date', { ascending: false })
+      ]);
 
-    if (!localStorage.getItem(this.KEY_NEWS)) {
-      const defaultNews = [
-        {
-          id: 'n1',
-          title: 'Открытие нового диагностического центра',
-          content: 'С радостью сообщаем об открытии нового диагностического центра на базе нашей клиники. Центр оснащён современным оборудованием: МРТ нового поколения, КТ с низкой дозой облучения и полный комплект для функциональной диагностики.\n\nВсе врачи могут направлять пациентов на обследования. Запись через внутреннюю систему.',
-          category: 'announcement',
-          author: 'u1',
-          createdAt: '2026-02-15',
-          pinned: true
-        },
-        {
-          id: 'n2',
-          title: 'Обновлены клинические рекомендации по лечению диабета 2 типа',
-          content: 'Минздрав выпустил обновлённые клинические рекомендации по лечению сахарного диабета 2 типа. Основные изменения:\n\n• Пересмотрены целевые показатели HbA1c для разных возрастных групп\n• Добавлены новые классы препаратов в первую линию терапии\n• Обновлены алгоритмы скрининга осложнений\n\nВсем врачам рекомендуется ознакомиться с полным текстом в базе знаний.',
-          category: 'medical',
-          author: 'u2',
-          createdAt: '2026-02-13',
-          pinned: false
-        },
-        {
-          id: 'n3',
-          title: 'Итоги программы Ист Коинов за январь',
-          content: 'Подводим итоги программы мотивации за январь 2026:\n\n• Всего выполнено задач: 127\n• Лидер месяца: Сидоров А.Н. — 28 задач, 1200 Ист Коинов\n• Средний рейтинг врачей: 4.3\n\nНапоминаем, что Ист Коины можно обменять на дополнительные дни отпуска, оплату конференций и курсов повышения квалификации.',
-          category: 'achievement',
-          author: 'u1',
-          createdAt: '2026-02-01',
-          pinned: false
-        },
-        {
-          id: 'n4',
-          title: 'Конференция по нейрохирургии — регистрация открыта',
-          content: 'Открыта регистрация на ежегодную конференцию по нейрохирургии, которая пройдёт 15-17 марта 2026 года. Участие можно оплатить Ист Коинами (стоимость: 300 коинов).\n\nПрограмма включает мастер-классы, доклады ведущих специалистов и практические сессии.',
-          category: 'event',
-          author: 'u2',
-          createdAt: '2026-02-10',
-          pinned: false
-        }
-      ];
-      localStorage.setItem(this.KEY_NEWS, JSON.stringify(defaultNews));
-    }
+      // Проверяем ошибки
+      if (usersRes.error) throw new Error('Ошибка загрузки users: ' + usersRes.error.message);
+      if (tasksRes.error) throw new Error('Ошибка загрузки tasks: ' + tasksRes.error.message);
+      if (newsRes.error) throw new Error('Ошибка загрузки news: ' + newsRes.error.message);
+      if (kbRes.error) throw new Error('Ошибка загрузки knowledge_base: ' + kbRes.error.message);
+      if (transRes.error) throw new Error('Ошибка загрузки transactions: ' + transRes.error.message);
 
-    if (!localStorage.getItem(this.KEY_KB)) {
-      const defaultKB = [
-        {
-          id: 'kb1',
-          title: 'Протокол лечения артериальной гипертензии',
-          content: '## Цель\nДостижение и поддержание целевых показателей артериального давления.\n\n## Целевые показатели\n- Общая популяция: < 140/90 мм рт.ст.\n- Пациенты с СД: < 130/80 мм рт.ст.\n- Пожилые пациенты (>80 лет): < 150/90 мм рт.ст.\n\n## Первая линия терапии\n1. Ингибиторы АПФ (Эналаприл, Лизиноприл)\n2. Блокаторы рецепторов ангиотензина (Лозартан, Валсартан)\n3. Блокаторы кальциевых каналов (Амлодипин)\n4. Тиазидные диуретики (Гидрохлортиазид)\n\n## Мониторинг\n- Контроль АД каждые 2 недели до достижения цели\n- Биохимия крови через 2 недели после начала терапии\n- Далее — контроль каждые 3 месяца',
-          category: 'protocols',
-          author: 'u2',
-          createdAt: '2026-01-10',
-          updatedAt: '2026-02-05',
-          tags: ['кардиология', 'гипертензия', 'протокол']
-        },
-        {
-          id: 'kb2',
-          title: 'Руководство по экстренной помощи при анафилаксии',
-          content: '## Диагностика\nАнафилаксия — острая системная аллергическая реакция. Признаки:\n- Крапивница, отёк Квинке\n- Бронхоспазм, стридор\n- Гипотензия, тахикардия\n- Тошнота, боли в животе\n\n## Алгоритм действий\n1. **Немедленно**: Адреналин 0.3-0.5 мг в/м в переднюю поверхность бедра\n2. Уложить пациента, приподнять ноги\n3. Обеспечить проходимость дыхательных путей\n4. В/в доступ, инфузия NaCl 0.9%\n5. При бронхоспазме — Сальбутамол ингаляционно\n6. Преднизолон 90-120 мг в/в\n7. Наблюдение минимум 24 часа\n\n## Важно\n- Повторная доза адреналина через 5-15 минут при отсутствии эффекта\n- Обязательно направить к аллергологу после выписки',
-          category: 'guidelines',
-          author: 'u2',
-          createdAt: '2026-01-15',
-          updatedAt: '2026-01-15',
-          tags: ['экстренная помощь', 'анафилаксия', 'аллергология']
-        },
-        {
-          id: 'kb3',
-          title: 'Методы современной диагностики в кардиологии',
-          content: '## Обзор\nСовременная кардиологическая диагностика включает широкий спектр инструментальных и лабораторных методов.\n\n## Инструментальные методы\n### ЭКГ\n- Стандартная 12-канальная ЭКГ\n- Холтеровское мониторирование (24-72 часа)\n- Стресс-тест\n\n### Эхокардиография\n- Трансторакальная ЭхоКГ\n- Чреспищеводная ЭхоКГ\n- Стресс-ЭхоКГ\n\n### Визуализация\n- КТ-коронарография\n- МРТ сердца\n- Сцинтиграфия миокарда\n\n## Лабораторная диагностика\n- Тропонин I/T — маркер повреждения миокарда\n- BNP/NT-proBNP — маркер сердечной недостаточности\n- Липидный профиль\n- Коагулограмма',
-          category: 'research',
-          author: 'u3',
-          createdAt: '2026-02-01',
-          updatedAt: '2026-02-10',
-          tags: ['кардиология', 'диагностика', 'исследования']
-        },
-        {
-          id: 'kb4',
-          title: 'Основы УЗИ-диагностики для начинающих',
-          content: '## Введение\nУльтразвуковая диагностика — неинвазивный метод визуализации внутренних органов.\n\n## Физические основы\n- Частота: 2-18 МГц\n- Принцип: отражение ультразвуковых волн от тканей\n- Разрешение зависит от частоты датчика\n\n## Типы датчиков\n1. **Конвексный** — органы брюшной полости\n2. **Линейный** — поверхностные структуры, сосуды\n3. **Секторный** — сердце (ЭхоКГ)\n4. **Эндокавитарный** — гинекология, урология\n\n## Стандартные протоколы\n- УЗИ брюшной полости: натощак, 6-8 часов голода\n- УЗИ почек: без специальной подготовки\n- УЗИ мочевого пузыря: наполненный мочевой пузырь\n- УЗИ щитовидной железы: без подготовки',
-          category: 'training_materials',
-          author: 'u2',
-          createdAt: '2026-01-20',
-          updatedAt: '2026-01-25',
-          tags: ['УЗИ', 'обучение', 'диагностика']
-        },
-        {
-          id: 'kb5',
-          title: 'FAQ: Частые вопросы по работе платформы',
-          content: '## Как заработать Ист Коины?\nВыполняйте задачи из раздела «Задачи». Каждая задача имеет указанную награду в Ист Коинах.\n\n## На что можно потратить Ист Коины?\n- Дополнительные дни отпуска (500 коинов = 1 день)\n- Оплата конференций и обучения\n- Премиальные бонусы\n- Приоритет в выборе графика\n\n## Как повысить свой рейтинг?\n- Выполняйте задачи качественно и в срок\n- Участвуйте в наставничестве\n- Публикуйте материалы в базе знаний\n- Получайте положительные отзывы от коллег\n\n## Уровни доступа\n- **Интерн**: просмотр базы знаний и новостей\n- **Врач**: выполнение задач, заработок коинов\n- **Главный врач**: создание задач, управление контентом\n- **Администратор**: полный доступ ко всем функциям',
-          category: 'faq',
-          author: 'u1',
-          createdAt: '2026-01-05',
-          updatedAt: '2026-02-14',
-          tags: ['FAQ', 'платформа', 'Ист Коины']
-        }
-      ];
-      localStorage.setItem(this.KEY_KB, JSON.stringify(defaultKB));
-    }
+      // Маппинг полей из БД в формат фронтенда
+      this._cache.users = (usersRes.data || []).map(u => ({
+        id: u.id,
+        login: u.login,
+        password: u.password,
+        name: u.name,
+        role: u.role,
+        specialty: u.specialty,
+        coins: u.coins,
+        rating: parseFloat(u.rating) || 0,
+        tasksCompleted: u.tasks_completed,
+        avatar: u.avatar_url,
+        createdAt: u.created_at
+      }));
 
-    if (!localStorage.getItem(this.KEY_TRANSACTIONS)) {
-      const defaultTransactions = [
-        { id: 'tr1', userId: 'u3', amount: 150, type: 'earned', description: 'Анализ эффективности нового препарата', taskId: 't7', date: '2026-02-13' },
-        { id: 'tr2', userId: 'u3', amount: 80, type: 'earned', description: 'Обучение интернов', taskId: 't3', date: '2026-02-06' },
-        { id: 'tr3', userId: 'u4', amount: 50, type: 'earned', description: 'Консультация пациента', taskId: null, date: '2026-02-08' },
-        { id: 'tr4', userId: 'u3', amount: -300, type: 'spent', description: 'Оплата конференции по кардиологии', taskId: null, date: '2026-01-20' },
-        { id: 'tr5', userId: 'u2', amount: 200, type: 'earned', description: 'Экстренное дежурство', taskId: null, date: '2026-01-28' }
-      ];
-      localStorage.setItem(this.KEY_TRANSACTIONS, JSON.stringify(defaultTransactions));
+      this._cache.tasks = (tasksRes.data || []).map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        category: t.category,
+        reward: t.reward,
+        status: t.status,
+        priority: t.priority,
+        assignedTo: t.assigned_to,
+        createdBy: t.created_by,
+        createdAt: t.created_at,
+        deadline: t.deadline,
+        completedAt: t.completed_at
+      }));
+
+      this._cache.news = (newsRes.data || []).map(n => ({
+        id: n.id,
+        title: n.title,
+        content: n.content,
+        category: n.category,
+        author: n.author,
+        createdAt: n.created_at,
+        pinned: n.pinned
+      }));
+
+      this._cache.kb = (kbRes.data || []).map(a => ({
+        id: a.id,
+        title: a.title,
+        content: a.content,
+        category: a.category,
+        author: a.author,
+        createdAt: a.created_at,
+        updatedAt: a.updated_at,
+        tags: a.tags || []
+      }));
+
+      this._cache.transactions = (transRes.data || []).map(t => ({
+        id: t.id,
+        userId: t.user_id,
+        amount: t.amount,
+        type: t.type,
+        description: t.description,
+        taskId: t.task_id,
+        date: t.date
+      }));
+
+      console.log('✅ Данные загружены:', {
+        users: this._cache.users.length,
+        tasks: this._cache.tasks.length,
+        news: this._cache.news.length,
+        kb: this._cache.kb.length,
+        transactions: this._cache.transactions.length
+      });
+
+    } catch (err) {
+      console.error('❌ Ошибка подключения к Supabase:', err);
+      console.log('⚠️ Используем пустые данные');
     }
   },
 
-  // CRUD helpers
-  getAll(key) {
-    return JSON.parse(localStorage.getItem(key) || '[]');
+  // ============================================
+  // Хелпер: синхронизация с Supabase (в фоне)
+  // ============================================
+  _sync(table, action, data) {
+    // Маппинг из camelCase в snake_case для БД
+    const mapToDb = {
+      users: (u) => ({
+        id: u.id, login: u.login, password: u.password, name: u.name,
+        role: u.role, specialty: u.specialty, coins: u.coins,
+        rating: u.rating, tasks_completed: u.tasksCompleted,
+        avatar_url: u.avatar, created_at: u.createdAt
+      }),
+      tasks: (t) => ({
+        id: t.id, title: t.title, description: t.description,
+        category: t.category, reward: t.reward, status: t.status,
+        priority: t.priority, assigned_to: t.assignedTo,
+        created_by: t.createdBy, created_at: t.createdAt,
+        deadline: t.deadline, completed_at: t.completedAt
+      }),
+      news: (n) => ({
+        id: n.id, title: n.title, content: n.content,
+        category: n.category, author: n.author,
+        created_at: n.createdAt, pinned: n.pinned
+      }),
+      knowledge_base: (a) => ({
+        id: a.id, title: a.title, content: a.content,
+        category: a.category, author: a.author,
+        created_at: a.createdAt, updated_at: a.updatedAt,
+        tags: a.tags
+      }),
+      transactions: (t) => ({
+        id: t.id, user_id: t.userId, amount: t.amount,
+        type: t.type, description: t.description,
+        task_id: t.taskId, date: t.date
+      })
+    };
+
+    const dbData = mapToDb[table] ? mapToDb[table](data) : data;
+
+    let promise;
+    if (action === 'upsert') {
+      promise = supabase.from(table).upsert(dbData);
+    } else if (action === 'delete') {
+      promise = supabase.from(table).delete().eq('id', data.id || data);
+    } else if (action === 'insert') {
+      promise = supabase.from(table).insert(dbData);
+    }
+
+    if (promise) {
+      promise.then(({ error }) => {
+        if (error) console.error(`❌ Sync error (${table}/${action}):`, error.message);
+        else console.log(`✅ Synced: ${table}/${action}`);
+      });
+    }
   },
 
-  save(key, data) {
-    localStorage.setItem(key, JSON.stringify(data));
-  },
-
+  // ============================================
   // User methods
-  getUsers() { return this.getAll(this.KEY_USERS); },
-  getUserById(id) { return this.getUsers().find(u => u.id === id); },
+  // ============================================
+  getUsers() { return this._cache.users; },
+  getUserById(id) { return this._cache.users.find(u => u.id === id); },
 
   updateUser(id, updates) {
-    const users = this.getUsers();
+    const users = this._cache.users;
     const idx = users.findIndex(u => u.id === id);
     if (idx !== -1) {
       users[idx] = { ...users[idx], ...updates };
-      this.save(this.KEY_USERS, users);
+      this._sync('users', 'upsert', users[idx]);
       return users[idx];
     }
     return null;
   },
 
   addUser(user) {
-    const users = this.getUsers();
     user.id = 'u' + Date.now();
-    users.push(user);
-    this.save(this.KEY_USERS, users);
+    this._cache.users.push(user);
+    this._sync('users', 'insert', user);
     return user;
   },
 
+  // ============================================
   // Task methods
-  getTasks() { return this.getAll(this.KEY_TASKS); },
-  getTaskById(id) { return this.getTasks().find(t => t.id === id); },
+  // ============================================
+  getTasks() { return this._cache.tasks; },
+  getTaskById(id) { return this._cache.tasks.find(t => t.id === id); },
 
   updateTask(id, updates) {
-    const tasks = this.getTasks();
+    const tasks = this._cache.tasks;
     const idx = tasks.findIndex(t => t.id === id);
     if (idx !== -1) {
       tasks[idx] = { ...tasks[idx], ...updates };
-      this.save(this.KEY_TASKS, tasks);
+      this._sync('tasks', 'upsert', tasks[idx]);
       return tasks[idx];
     }
     return null;
   },
 
   addTask(task) {
-    const tasks = this.getTasks();
     task.id = 't' + Date.now();
-    tasks.push(task);
-    this.save(this.KEY_TASKS, tasks);
+    this._cache.tasks.push(task);
+    this._sync('tasks', 'insert', task);
     return task;
   },
 
   deleteTask(id) {
-    const tasks = this.getTasks().filter(t => t.id !== id);
-    this.save(this.KEY_TASKS, tasks);
+    this._cache.tasks = this._cache.tasks.filter(t => t.id !== id);
+    this._sync('tasks', 'delete', { id });
   },
 
+  // ============================================
   // News methods
-  getNews() { return this.getAll(this.KEY_NEWS); },
+  // ============================================
+  getNews() { return this._cache.news; },
+
   addNews(article) {
-    const news = this.getNews();
     article.id = 'n' + Date.now();
-    news.unshift(article);
-    this.save(this.KEY_NEWS, news);
+    this._cache.news.unshift(article);
+    this._sync('news', 'insert', article);
     return article;
-  },
-  deleteNews(id) {
-    const news = this.getNews().filter(n => n.id !== id);
-    this.save(this.KEY_NEWS, news);
   },
 
+  deleteNews(id) {
+    this._cache.news = this._cache.news.filter(n => n.id !== id);
+    this._sync('news', 'delete', { id });
+  },
+
+  // ============================================
   // Knowledge base methods
-  getKB() { return this.getAll(this.KEY_KB); },
+  // ============================================
+  getKB() { return this._cache.kb; },
+
   addKBArticle(article) {
-    const kb = this.getKB();
     article.id = 'kb' + Date.now();
-    kb.push(article);
-    this.save(this.KEY_KB, kb);
+    this._cache.kb.push(article);
+    this._sync('knowledge_base', 'insert', article);
     return article;
   },
+
   updateKBArticle(id, updates) {
-    const kb = this.getKB();
+    const kb = this._cache.kb;
     const idx = kb.findIndex(a => a.id === id);
     if (idx !== -1) {
       kb[idx] = { ...kb[idx], ...updates };
-      this.save(this.KEY_KB, kb);
+      this._sync('knowledge_base', 'upsert', kb[idx]);
       return kb[idx];
     }
     return null;
   },
+
   deleteKBArticle(id) {
-    const kb = this.getKB().filter(a => a.id !== id);
-    this.save(this.KEY_KB, kb);
+    this._cache.kb = this._cache.kb.filter(a => a.id !== id);
+    this._sync('knowledge_base', 'delete', { id });
   },
 
+  // ============================================
   // Transaction methods
-  getTransactions() { return this.getAll(this.KEY_TRANSACTIONS); },
-  getUserTransactions(userId) { return this.getTransactions().filter(t => t.userId === userId); },
+  // ============================================
+  getTransactions() { return this._cache.transactions; },
+  getUserTransactions(userId) { return this._cache.transactions.filter(t => t.userId === userId); },
+
   addTransaction(transaction) {
-    const transactions = this.getTransactions();
     transaction.id = 'tr' + Date.now();
-    transactions.unshift(transaction);
-    this.save(this.KEY_TRANSACTIONS, transactions);
+    this._cache.transactions.unshift(transaction);
+    this._sync('transactions', 'insert', transaction);
     return transaction;
   },
 
-  // Auth methods
+  // ============================================
+  // Auth methods (сессия в localStorage, данные в Supabase)
+  // ============================================
   login(login, password) {
-    const user = this.getUsers().find(u => u.login === login && u.password === password);
+    const user = this._cache.users.find(u => u.login === login && u.password === password);
     if (user) {
       const session = { userId: user.id, loginAt: new Date().toISOString() };
       localStorage.setItem(this.KEY_SESSION, JSON.stringify(session));
@@ -507,18 +389,19 @@ const DB = {
     return this.ROLE_PERMISSIONS[user.role]?.includes(permission) || false;
   },
 
-  // Rating calculation
+  // ============================================
+  // Rating & Leaderboard
+  // ============================================
   calculateRating(userId) {
-    const tasks = this.getTasks().filter(t => t.assignedTo === userId && t.status === 'completed');
+    const tasks = this._cache.tasks.filter(t => t.assignedTo === userId && t.status === 'completed');
     if (tasks.length === 0) return 0;
     const onTime = tasks.filter(t => !t.deadline || t.completedAt <= t.deadline).length;
     const ratio = onTime / tasks.length;
-    return Math.round((3 + ratio * 2) * 10) / 10; // Rating 3.0 - 5.0
+    return Math.round((3 + ratio * 2) * 10) / 10;
   },
 
-  // Leaderboard
   getLeaderboard() {
-    return this.getUsers()
+    return this._cache.users
       .filter(u => u.role !== 'admin')
       .sort((a, b) => b.coins - a.coins)
       .map((u, i) => ({ ...u, rank: i + 1 }));
