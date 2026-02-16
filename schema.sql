@@ -181,6 +181,48 @@ ALTER TABLE tasks ADD COLUMN tags TEXT[];
 ALTER TABLE tasks ADD COLUMN notes TEXT;
 
 -- =====================
+-- 10. ТОВАРЫ МАГАЗИНА
+-- =====================
+CREATE TABLE store_products (
+    id          TEXT PRIMARY KEY,
+    name        VARCHAR(300) NOT NULL,
+    icon        VARCHAR(10) NOT NULL DEFAULT '🎁',
+    description TEXT,
+    price       INTEGER NOT NULL DEFAULT 0,
+    stock       INTEGER,
+    active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by  TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- =====================
+-- 11. ПОКУПКИ
+-- =====================
+CREATE TABLE purchases (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL,
+    product_id   TEXT NOT NULL,
+    product_name VARCHAR(300),
+    price        INTEGER NOT NULL DEFAULT 0,
+    created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_purchases_user ON purchases(user_id);
+
+-- =====================
+-- 12. СООБЩЕНИЯ (МЕССЕНДЖЕР)
+-- =====================
+CREATE TABLE messages (
+    id            TEXT PRIMARY KEY,
+    from_user_id  TEXT NOT NULL,
+    to_user_id    TEXT NOT NULL,
+    text          TEXT NOT NULL,
+    read          BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_messages_from ON messages(from_user_id);
+CREATE INDEX idx_messages_to ON messages(to_user_id);
+
+-- =====================
 -- НАЧАЛЬНЫЕ ДАННЫЕ
 -- =====================
 INSERT INTO users (login, password, name, role, specialty, coins, rating, tasks_completed, birthday) VALUES

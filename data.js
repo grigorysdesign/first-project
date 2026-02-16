@@ -19,7 +19,10 @@ const DB = {
     transactions: [],
     todos: [],
     taskAttachments: [],
-    userRatings: []
+    userRatings: [],
+    storeProducts: [],
+    purchases: [],
+    messages: []
   },
 
   KEY_SESSION: 'clinic_session',
@@ -104,7 +107,7 @@ const DB = {
 
     try {
       // Загружаем все таблицы параллельно
-      const [usersRes, tasksRes, newsRes, kbRes, transRes, todosRes, attachRes, ratingsRes] = await Promise.all([
+      const [usersRes, tasksRes, newsRes, kbRes, transRes, todosRes, attachRes, ratingsRes, productsRes, purchasesRes, messagesRes] = await Promise.all([
         supabaseClient.from('users').select('*'),
         supabaseClient.from('tasks').select('*').order('created_at', { ascending: false }),
         supabaseClient.from('news').select('*').order('created_at', { ascending: false }),
@@ -112,7 +115,10 @@ const DB = {
         supabaseClient.from('transactions').select('*').order('date', { ascending: false }),
         supabaseClient.from('user_todos').select('*').order('created_at', { ascending: false }),
         supabaseClient.from('task_attachments').select('*').order('created_at', { ascending: false }),
-        supabaseClient.from('user_ratings').select('*')
+        supabaseClient.from('user_ratings').select('*'),
+        supabaseClient.from('store_products').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('purchases').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('messages').select('*').order('created_at', { ascending: true })
       ]);
 
       // Проверяем ошибки (некритичные для новых таблиц)
@@ -124,6 +130,9 @@ const DB = {
       if (todosRes.error) console.warn('user_todos не загружены:', todosRes.error.message);
       if (attachRes.error) console.warn('task_attachments не загружены:', attachRes.error.message);
       if (ratingsRes.error) console.warn('user_ratings не загружены:', ratingsRes.error.message);
+      if (productsRes.error) console.warn('store_products не загружены:', productsRes.error.message);
+      if (purchasesRes.error) console.warn('purchases не загружены:', purchasesRes.error.message);
+      if (messagesRes.error) console.warn('messages не загружены:', messagesRes.error.message);
 
       // Маппинг полей из БД в формат фронтенда
       this._cache.users = (usersRes.data || []).map(u => ({
@@ -226,6 +235,36 @@ const DB = {
         createdAt: r.created_at
       }));
 
+      this._cache.storeProducts = (productsRes.data || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        icon: p.icon,
+        description: p.description,
+        price: p.price,
+        stock: p.stock,
+        active: p.active,
+        createdBy: p.created_by,
+        createdAt: p.created_at
+      }));
+
+      this._cache.purchases = (purchasesRes.data || []).map(p => ({
+        id: p.id,
+        userId: p.user_id,
+        productId: p.product_id,
+        productName: p.product_name,
+        price: p.price,
+        date: p.created_at
+      }));
+
+      this._cache.messages = (messagesRes.data || []).map(m => ({
+        id: m.id,
+        fromUserId: m.from_user_id,
+        toUserId: m.to_user_id,
+        text: m.text,
+        read: m.read,
+        createdAt: m.created_at
+      }));
+
       console.log('✅ Данные загружены:', {
         users: this._cache.users.length,
         tasks: this._cache.tasks.length,
@@ -294,6 +333,21 @@ const DB = {
         id: r.id, user_id: r.userId, rated_by: r.ratedBy,
         score: r.score, comment: r.comment,
         created_at: r.createdAt
+      }),
+      store_products: (p) => ({
+        id: p.id, name: p.name, icon: p.icon,
+        description: p.description, price: p.price,
+        stock: p.stock, active: p.active,
+        created_by: p.createdBy, created_at: p.createdAt
+      }),
+      purchases: (p) => ({
+        id: p.id, user_id: p.userId, product_id: p.productId,
+        product_name: p.productName, price: p.price,
+        created_at: p.date
+      }),
+      messages: (m) => ({
+        id: m.id, from_user_id: m.fromUserId, to_user_id: m.toUserId,
+        text: m.text, read: m.read, created_at: m.createdAt
       })
     };
 
@@ -600,5 +654,107 @@ const DB = {
       .filter(u => u.role !== 'admin')
       .sort((a, b) => b.coins - a.coins)
       .map((u, i) => ({ ...u, rank: i + 1 }));
+  },
+
+  // ============================================
+  // Store Products methods
+  // ============================================
+  getStoreProducts() { return this._cache.storeProducts; },
+
+  addStoreProduct(product) {
+    product.id = 'sp' + Date.now();
+    this._cache.storeProducts.unshift(product);
+    this._sync('store_products', 'insert', product);
+    return product;
+  },
+
+  updateStoreProduct(id, updates) {
+    const idx = this._cache.storeProducts.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      this._cache.storeProducts[idx] = { ...this._cache.storeProducts[idx], ...updates };
+      this._sync('store_products', 'upsert', this._cache.storeProducts[idx]);
+      return this._cache.storeProducts[idx];
+    }
+    return null;
+  },
+
+  deleteStoreProduct(id) {
+    this._cache.storeProducts = this._cache.storeProducts.filter(p => p.id !== id);
+    this._sync('store_products', 'delete', { id });
+  },
+
+  // ============================================
+  // Purchases methods
+  // ============================================
+  getUserPurchases(userId) { return this._cache.purchases.filter(p => p.userId === userId); },
+
+  purchaseProduct(userId, productId) {
+    const product = this._cache.storeProducts.find(p => p.id === productId);
+    if (!product) return null;
+    const user = this.getUserById(userId);
+    if (!user || user.coins < product.price) return null;
+
+    // Deduct coins
+    this.updateUser(userId, { coins: user.coins - product.price });
+
+    // Record transaction
+    this.addTransaction({
+      userId,
+      amount: -product.price,
+      type: 'spent',
+      description: `Покупка: ${product.name}`,
+      taskId: null,
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    // Reduce stock if applicable
+    if (product.stock !== null) {
+      this.updateStoreProduct(productId, { stock: product.stock - 1 });
+      if (product.stock - 1 <= 0) {
+        this.updateStoreProduct(productId, { active: false });
+      }
+    }
+
+    // Record purchase
+    const purchase = {
+      id: 'pu' + Date.now(),
+      userId,
+      productId,
+      productName: product.name,
+      price: product.price,
+      date: new Date().toISOString()
+    };
+    this._cache.purchases.unshift(purchase);
+    this._sync('purchases', 'insert', purchase);
+    return purchase;
+  },
+
+  // ============================================
+  // Messages methods
+  // ============================================
+  getUserMessages(userId) {
+    return this._cache.messages.filter(m => m.fromUserId === userId || m.toUserId === userId);
+  },
+
+  getConversation(userId1, userId2) {
+    return this._cache.messages.filter(m =>
+      (m.fromUserId === userId1 && m.toUserId === userId2) ||
+      (m.fromUserId === userId2 && m.toUserId === userId1)
+    );
+  },
+
+  addMessage(message) {
+    message.id = 'msg' + Date.now();
+    this._cache.messages.push(message);
+    this._sync('messages', 'insert', message);
+    return message;
+  },
+
+  markMessageRead(id) {
+    const idx = this._cache.messages.findIndex(m => m.id === id);
+    if (idx !== -1) {
+      this._cache.messages[idx].read = true;
+      this._sync('messages', 'upsert', this._cache.messages[idx]);
+    }
   }
 };
