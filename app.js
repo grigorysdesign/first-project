@@ -36,6 +36,7 @@ const App = {
 
     root.innerHTML = `
       <div class="layout">
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
         ${this.renderSidebar()}
         <main class="main-content">
           ${this.renderHeader()}
@@ -195,6 +196,11 @@ const App = {
     };
     return `
       <header class="page-header">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Открыть меню">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
         <h2>${titles[this.currentPage] || 'Страница'}</h2>
         <div class="header-right">
           <span class="header-date">${new Date().toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
@@ -924,10 +930,28 @@ const App = {
 
   // ============ EVENT BINDING ============
   bindPageEvents() {
+    // Mobile menu toggle
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const menuBtn = document.getElementById('mobileMenuBtn');
+
+    const closeMobileMenu = () => {
+      sidebar?.classList.remove('open');
+      overlay?.classList.remove('open');
+    };
+
+    menuBtn?.addEventListener('click', () => {
+      sidebar?.classList.toggle('open');
+      overlay?.classList.toggle('open');
+    });
+
+    overlay?.addEventListener('click', closeMobileMenu);
+
     // Navigation
     document.querySelectorAll('[data-page]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
+        closeMobileMenu();
         const page = el.dataset.page;
         const id = el.dataset.id;
         this.navigate(page, id ? { id } : {});
