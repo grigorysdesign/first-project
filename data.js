@@ -7,7 +7,7 @@ const SUPABASE_URL = 'https://ihlecobbuzeuhwstryqn.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlobGVjb2JidXpldWh3c3RyeXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNTU3OTcsImV4cCI6MjA4NjgzMTc5N30.H4MQGWg2ixJaT2qgVGlOTOjCTR8Xmwc6uP4msrfiEcg';
 
 // Инициализация Supabase-клиента
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const DB = {
   // Кеш данных в памяти (загружается при старте)
@@ -102,11 +102,11 @@ const DB = {
     try {
       // Загружаем все таблицы параллельно
       const [usersRes, tasksRes, newsRes, kbRes, transRes] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
-        supabase.from('news').select('*').order('created_at', { ascending: false }),
-        supabase.from('knowledge_base').select('*'),
-        supabase.from('transactions').select('*').order('date', { ascending: false })
+        supabaseClient.from('users').select('*'),
+        supabaseClient.from('tasks').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('news').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('knowledge_base').select('*'),
+        supabaseClient.from('transactions').select('*').order('date', { ascending: false })
       ]);
 
       // Проверяем ошибки
@@ -232,11 +232,11 @@ const DB = {
 
     let promise;
     if (action === 'upsert') {
-      promise = supabase.from(table).upsert(dbData);
+      promise = supabaseClient.from(table).upsert(dbData);
     } else if (action === 'delete') {
-      promise = supabase.from(table).delete().eq('id', data.id || data);
+      promise = supabaseClient.from(table).delete().eq('id', data.id || data);
     } else if (action === 'insert') {
-      promise = supabase.from(table).insert(dbData);
+      promise = supabaseClient.from(table).insert(dbData);
     }
 
     if (promise) {
