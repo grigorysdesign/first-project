@@ -5,11 +5,27 @@
 const App = {
   currentPage: 'login',
   currentUser: null,
+  notifications: [],
+  messengerOpen: false,
+  messengerChatWith: null,
+
+  // File upload constraints
+  FILE_MAX_SIZE: 10 * 1024 * 1024, // 10 MB
+  FILE_ALLOWED_TYPES: [
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv'
+  ],
+  FILE_ALLOWED_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
 
   init() {
     // DB.init() теперь вызывается снаружи (async)
     this.currentUser = DB.getCurrentUser();
     if (this.currentUser) {
+      this.generateNotifications();
       this.navigate('dashboard');
     } else {
       this.navigate('login');
@@ -20,6 +36,112 @@ const App = {
     this.currentPage = page;
     this.params = params;
     this.render();
+  },
+
+  // File validation
+  validateFile(file) {
+    const errors = [];
+    if (file.size > this.FILE_MAX_SIZE) {
+      errors.push(`Файл "${file.name}" превышает максимальный размер 10 МБ (${this.formatFileSize(file.size)})`);
+    }
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!this.FILE_ALLOWED_EXTENSIONS.includes(ext)) {
+      errors.push(`Тип файла "${ext}" не поддерживается. Допустимые: ${this.FILE_ALLOWED_EXTENSIONS.join(', ')}`);
+    }
+    return errors;
+  },
+
+  validateImageFile(file) {
+    const errors = [];
+    if (file.size > 5 * 1024 * 1024) {
+      errors.push(`Изображение превышает 5 МБ (${this.formatFileSize(file.size)})`);
+    }
+    if (!file.type.startsWith('image/')) {
+      errors.push('Допустимы только изображения (JPG, PNG, GIF, WebP)');
+    }
+    return errors;
+  },
+
+  // Notifications
+  generateNotifications() {
+    this.notifications = [];
+    const user = this.currentUser;
+    if (!user) return;
+
+    // Birthday notifications
+    const birthdays = DB.getTodayBirthdays();
+    birthdays.forEach(b => {
+      if (b.id !== user.id) {
+        this.notifications.push({
+          id: 'bday-' + b.id,
+          type: 'birthday',
+          icon: '🎂',
+          title: 'День рождения',
+          text: `Сегодня день рождения у ${b.name}!`,
+          time: 'Сегодня',
+          read: false
+        });
+      }
+    });
+
+    // New task assignments
+    const myTasks = DB.getTasks().filter(t => t.assignedTo === user.id && t.status === 'in_progress');
+    myTasks.forEach(t => {
+      this.notifications.push({
+        id: 'task-' + t.id,
+        type: 'task',
+        icon: '📋',
+        title: 'Назначена задача',
+        text: t.title,
+        time: this.formatDate(t.createdAt),
+        read: false,
+        page: 'task-detail',
+        pageId: t.id
+      });
+    });
+
+    // New reviews
+    const reviews = DB.getUserRatings(user.id);
+    reviews.slice(0, 3).forEach(r => {
+      const reviewer = DB.getUserById(r.ratedBy);
+      this.notifications.push({
+        id: 'review-' + r.id,
+        type: 'review',
+        icon: '⭐',
+        title: 'Новый отзыв',
+        text: `${reviewer?.name.split(' ').slice(0, 2).join(' ') || 'Коллега'} оценил вас на ${r.score}/5`,
+        time: this.formatDate(r.createdAt),
+        read: false
+      });
+    });
+
+    // Tasks on review (for admins/heads)
+    if (this.hasPermission('edit_tasks')) {
+      const reviewTasks = DB.getTasks().filter(t => t.status === 'review');
+      reviewTasks.forEach(t => {
+        this.notifications.push({
+          id: 'review-task-' + t.id,
+          type: 'task',
+          icon: '🔍',
+          title: 'Задача на проверке',
+          text: t.title,
+          time: this.formatDate(t.createdAt),
+          read: false,
+          page: 'task-detail',
+          pageId: t.id
+        });
+      });
+    }
+  },
+
+  // Show loading spinner
+  showSpinner(container, text = 'Загрузка...') {
+    if (typeof container === 'string') {
+      container = document.getElementById(container) || document.querySelector(container);
+    }
+    if (container) {
+      container.innerHTML = `<div class="spinner-overlay"><div class="spinner"></div><span class="spinner-text">${text}</span></div>`;
+    }
   },
 
   hasPermission(perm) {
@@ -120,6 +242,9 @@ const App = {
     const role = DB.ROLE_LABELS[user.role];
     const menuItems = this.getMenuItems();
 
+    const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2);
+    const unreadNotifs = this.notifications.filter(n => !n.read).length;
+
     return `
       <aside class="sidebar">
         <div class="sidebar-header">
@@ -128,18 +253,18 @@ const App = {
             <span>ClinicHub</span>
           </div>
         </div>
-        <div class="sidebar-user">
-          <div class="avatar">${user.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+        <a href="#" class="sidebar-user sidebar-profile-link" data-page="profile">
+          <div class="avatar ${user.avatar ? 'has-image' : ''}">${user.avatar ? `<img src="${user.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : initials}</div>
           <div class="user-info">
             <div class="user-name">${user.name.split(' ').slice(0, 2).join(' ')}</div>
             <div class="user-role">${role}</div>
           </div>
-        </div>
-        <div class="sidebar-coins">
+        </a>
+        <a href="#" class="sidebar-coins" data-page="wallet">
           <span class="coin-icon">◆</span>
           <span class="coin-amount">${user.coins}</span>
           <span class="coin-label">Ист Коинов</span>
-        </div>
+        </a>
         <nav class="sidebar-nav">
           ${menuItems.map(item => `
             <a href="#" class="nav-item ${this.currentPage === item.page ? 'active' : ''}" data-page="${item.page}">
@@ -162,15 +287,17 @@ const App = {
   getMenuItems() {
     const openTasks = DB.getTasks().filter(t => t.status === 'open').length;
     const todoCount = DB.getUserTodos(this.currentUser.id).filter(t => !t.isDone).length;
+    const unreadNotifs = this.notifications.filter(n => !n.read).length;
     const items = [
       { page: 'dashboard', label: 'Дашборд', icon: '⊞', permission: 'view_dashboard' },
-      { page: 'profile', label: 'Профиль', icon: '⊙', permission: 'view_dashboard' },
       { page: 'tasks', label: 'Задачи', icon: '☰', permission: 'view_dashboard', badge: openTasks || null },
       { page: 'my-todos', label: 'Мои дела', icon: '✓', permission: 'view_dashboard', badge: todoCount || null },
       { page: 'news', label: 'Новости', icon: '⊕', permission: 'view_dashboard' },
       { page: 'knowledge', label: 'База знаний', icon: '⊘', permission: 'view_dashboard' },
-      { page: 'rating', label: 'Рейтинг', icon: '★', permission: 'view_dashboard' },
-      { page: 'wallet', label: 'Кошелёк', icon: '◆', permission: 'view_dashboard' },
+      { page: 'wallet', label: 'Ист Коины', icon: '◆', permission: 'view_dashboard' },
+      { page: 'store', label: 'Магазин', icon: '🛒', permission: 'view_dashboard' },
+      { page: 'messenger', label: 'Сообщения', icon: '💬', permission: 'view_dashboard' },
+      { page: 'notifications', label: 'Уведомления', icon: '🔔', permission: 'view_dashboard', badge: unreadNotifs || null },
     ];
 
     if (this.hasPermission('manage_users')) {
@@ -189,16 +316,20 @@ const App = {
       'my-todos': 'Мои дела',
       news: 'Новости',
       knowledge: 'База знаний',
-      rating: 'Рейтинг врачей',
-      wallet: 'Кошелёк Ист Коинов',
+      wallet: 'Ист Коины',
+      store: 'Магазин',
+      messenger: 'Сообщения',
+      notifications: 'Уведомления',
       users: 'Управление пользователями',
       'task-detail': 'Детали задачи',
       'news-detail': 'Новость',
       'kb-detail': 'Статья',
       'create-task': 'Новая задача',
       'create-news': 'Новая новость',
-      'create-kb': 'Новая статья'
+      'create-kb': 'Новая статья',
+      'store-manage': 'Управление магазином'
     };
+    const unreadNotifs = this.notifications.filter(n => !n.read).length;
     return `
       <header class="page-header">
         <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Открыть меню">
@@ -208,6 +339,9 @@ const App = {
         </button>
         <h2>${titles[this.currentPage] || 'Страница'}</h2>
         <div class="header-right">
+          <button class="header-notif-btn" data-page="notifications" title="Уведомления">
+            🔔${unreadNotifs > 0 ? `<span class="header-notif-badge">${unreadNotifs}</span>` : ''}
+          </button>
           <span class="header-date">${new Date().toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
         </div>
       </header>
@@ -229,8 +363,11 @@ const App = {
       case 'knowledge': return this.renderKnowledge();
       case 'kb-detail': return this.renderKBDetail();
       case 'create-kb': return this.renderCreateKB();
-      case 'rating': return this.renderRating();
       case 'wallet': return this.renderWallet();
+      case 'store': return this.renderStore();
+      case 'store-manage': return this.renderStoreManage();
+      case 'messenger': return this.renderMessenger();
+      case 'notifications': return this.renderNotifications();
       case 'users': return this.renderUsers();
       default: return '<p>Страница не найдена</p>';
     }
@@ -272,13 +409,6 @@ const App = {
           </div>
         ` : ''}
         <div class="stats-grid">
-          <div class="stat-card stat-blue">
-            <div class="stat-icon">★</div>
-            <div class="stat-info">
-              <div class="stat-value">${user.rating.toFixed(1)}</div>
-              <div class="stat-label">Рейтинг</div>
-            </div>
-          </div>
           <div class="stat-card stat-green">
             <div class="stat-icon">◆</div>
             <div class="stat-info">
@@ -298,6 +428,13 @@ const App = {
             <div class="stat-info">
               <div class="stat-value">${openTasks}</div>
               <div class="stat-label">Доступно задач</div>
+            </div>
+          </div>
+          <div class="stat-card stat-blue">
+            <div class="stat-icon">💬</div>
+            <div class="stat-info">
+              <div class="stat-value">${DB.getUserMessages(user.id).filter(m => !m.read && m.toUserId === user.id).length}</div>
+              <div class="stat-label">Новых сообщений</div>
             </div>
           </div>
         </div>
@@ -325,17 +462,21 @@ const App = {
 
           <div class="card">
             <div class="card-header">
-              <h3>Топ врачей</h3>
-              <a href="#" class="link" data-page="rating">Весь рейтинг →</a>
+              <h3>Уведомления</h3>
+              <a href="#" class="link" data-page="notifications">Все →</a>
             </div>
             <div class="card-body">
-              ${leaderboard.map((u, i) => `
-                <div class="leader-row">
-                  <span class="leader-rank ${i < 3 ? 'top-' + (i + 1) : ''}">#${u.rank}</span>
-                  <span class="leader-name">${u.name.split(' ').slice(0, 2).join(' ')}</span>
-                  <span class="leader-coins">${u.coins} ◆</span>
-                </div>
-              `).join('')}
+              ${this.notifications.length === 0
+                ? '<p class="empty-text">Нет уведомлений</p>'
+                : this.notifications.slice(0, 4).map(n => `
+                  <div class="notif-mini ${n.read ? '' : 'notif-unread'}">
+                    <span class="notif-mini-icon">${n.icon}</span>
+                    <div class="notif-mini-content">
+                      <div class="notif-mini-title">${n.title}</div>
+                      <div class="notif-mini-text">${n.text}</div>
+                    </div>
+                  </div>
+                `).join('')}
             </div>
           </div>
 
@@ -357,7 +498,7 @@ const App = {
           <div class="card">
             <div class="card-header">
               <h3>Последние транзакции</h3>
-              <a href="#" class="link" data-page="wallet">Кошелёк →</a>
+              <a href="#" class="link" data-page="wallet">Ист Коины →</a>
             </div>
             <div class="card-body">
               ${transactions.length === 0
@@ -824,10 +965,6 @@ const App = {
             <p class="profile-role">${DB.ROLE_LABELS[user.role]} — ${user.specialty}</p>
             <div class="profile-stats">
               <div class="profile-stat">
-                <span class="profile-stat-value">${avgRating.toFixed(1)}</span>
-                <span class="profile-stat-label">Рейтинг</span>
-              </div>
-              <div class="profile-stat">
                 <span class="profile-stat-value">${user.coins}</span>
                 <span class="profile-stat-label">Ист Коинов</span>
               </div>
@@ -1086,7 +1223,7 @@ const App = {
             <span class="wallet-coin-icon">◆</span>
             <span class="wallet-amount">${user.coins}</span>
           </div>
-          <p>Ваш баланс Ист Коинов</p>
+          <p>Ваш баланс</p>
         </div>
         <div class="wallet-stats">
           <div class="wallet-stat earned">
@@ -1122,46 +1259,256 @@ const App = {
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><h3>На что потратить Ист Коины</h3></div>
+          <div class="card-header">
+            <h3>Потратить Ист Коины</h3>
+            <a href="#" class="link" data-page="store">Перейти в магазин →</a>
+          </div>
           <div class="card-body">
-            <div class="shop-items">
-              <div class="shop-item">
-                <div class="shop-item-icon">🏖️</div>
-                <div class="shop-item-info">
-                  <h4>День отпуска</h4>
-                  <p>Дополнительный день к отпуску</p>
-                </div>
-                <div class="shop-item-price">500 ◆</div>
-              </div>
-              <div class="shop-item">
-                <div class="shop-item-icon">🎓</div>
-                <div class="shop-item-info">
-                  <h4>Конференция</h4>
-                  <p>Оплата участия в конференции</p>
-                </div>
-                <div class="shop-item-price">300 ◆</div>
-              </div>
-              <div class="shop-item">
-                <div class="shop-item-icon">📚</div>
-                <div class="shop-item-info">
-                  <h4>Курс обучения</h4>
-                  <p>Повышение квалификации</p>
-                </div>
-                <div class="shop-item-price">400 ◆</div>
-              </div>
-              <div class="shop-item">
-                <div class="shop-item-icon">⭐</div>
-                <div class="shop-item-info">
-                  <h4>Приоритет графика</h4>
-                  <p>Выбор удобного графика на месяц</p>
-                </div>
-                <div class="shop-item-price">200 ◆</div>
-              </div>
-            </div>
+            <p class="empty-text">Покупайте товары и привилегии за Ист Коины в <a href="#" data-page="store">Магазине</a></p>
           </div>
         </div>
       </div>
     `;
+  },
+
+  // ============ STORE ============
+  renderStore() {
+    const user = this.currentUser;
+    const products = DB.getStoreProducts();
+    const canManage = this.hasPermission('manage_users');
+
+    return `
+      <div class="store-page">
+        <div class="page-actions">
+          <h3>Магазин — тратьте Ист Коины</h3>
+          ${canManage ? '<button class="btn btn-primary" data-page="store-manage">⚙ Управление товарами</button>' : ''}
+        </div>
+        <div class="store-balance-bar">
+          <span>Ваш баланс:</span>
+          <strong>${user.coins} ◆ Ист Коинов</strong>
+        </div>
+        <div class="store-grid">
+          ${products.length === 0
+            ? '<div class="empty-state"><p>Товары пока не добавлены</p></div>'
+            : products.filter(p => p.active).map(p => `
+              <div class="store-product-card">
+                <div class="store-product-icon">${p.icon}</div>
+                <h4 class="store-product-title">${p.name}</h4>
+                <p class="store-product-desc">${p.description}</p>
+                <div class="store-product-footer">
+                  <span class="store-product-price">${p.price} ◆</span>
+                  <button class="btn btn-sm ${user.coins >= p.price ? 'btn-primary' : 'btn-ghost'} buy-product-btn"
+                    data-product-id="${p.id}" ${user.coins < p.price ? 'disabled title="Недостаточно Ист Коинов"' : ''}>
+                    ${user.coins >= p.price ? 'Купить' : 'Недостаточно'}
+                  </button>
+                </div>
+                ${p.stock !== null ? `<div class="store-product-stock">Осталось: ${p.stock}</div>` : ''}
+              </div>
+            `).join('')}
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-header"><h3>Мои покупки</h3></div>
+          <div class="card-body">
+            ${(() => {
+              const purchases = DB.getUserPurchases(user.id);
+              return purchases.length === 0
+                ? '<p class="empty-text">Вы ещё ничего не покупали</p>'
+                : purchases.map(p => `
+                  <div class="transaction-row">
+                    <div class="transaction-info">
+                      <div class="transaction-icon spent">🛒</div>
+                      <div>
+                        <div class="transaction-desc">${p.productName}</div>
+                        <div class="transaction-date">${this.formatDate(p.date)}</div>
+                      </div>
+                    </div>
+                    <div class="transaction-amount negative">-${p.price} ◆</div>
+                  </div>
+                `).join('');
+            })()}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderStoreManage() {
+    const products = DB.getStoreProducts();
+    return `
+      <div class="detail-page">
+        <button class="btn btn-ghost" data-page="store">← Назад в магазин</button>
+        <div class="detail-card">
+          <h2>Управление товарами</h2>
+          <form id="addProductForm" class="form" style="margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--gray-200);">
+            <h4 style="margin-bottom:12px;">Добавить товар</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Название</label>
+                <input type="text" id="productName" required placeholder="Название товара">
+              </div>
+              <div class="form-group">
+                <label>Иконка (эмодзи)</label>
+                <input type="text" id="productIcon" value="🎁" required placeholder="🎁">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Описание</label>
+              <textarea id="productDesc" rows="2" required placeholder="Описание товара"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Цена (Ист Коины)</label>
+                <input type="number" id="productPrice" min="1" max="10000" value="100" required>
+              </div>
+              <div class="form-group">
+                <label>Кол-во (пусто = безлимит)</label>
+                <input type="number" id="productStock" min="0" placeholder="Безлимитно">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Добавить товар</button>
+          </form>
+          <h4>Текущие товары</h4>
+          <div style="margin-top:12px;">
+            ${products.length === 0 ? '<p class="empty-text">Нет товаров</p>' : products.map(p => `
+              <div class="store-manage-item">
+                <span class="store-manage-icon">${p.icon}</span>
+                <div class="store-manage-info">
+                  <strong>${p.name}</strong>
+                  <span>${p.price} ◆ ${p.stock !== null ? `(${p.stock} шт.)` : '(безлимит)'} ${p.active ? '' : '— неактивен'}</span>
+                </div>
+                <button class="btn btn-sm btn-ghost toggle-product-btn" data-product-id="${p.id}">${p.active ? 'Скрыть' : 'Показать'}</button>
+                <button class="btn btn-sm btn-danger delete-product-btn" data-product-id="${p.id}">✕</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  // ============ NOTIFICATIONS ============
+  renderNotifications() {
+    this.notifications.forEach(n => n.read = true);
+    return `
+      <div class="notifications-page" style="max-width:800px;">
+        <h3 style="margin-bottom:16px;">Все уведомления</h3>
+        ${this.notifications.length === 0
+          ? '<div class="empty-state"><p>Нет уведомлений</p></div>'
+          : `<div class="notifications-list">
+              ${this.notifications.map(n => `
+                <div class="notif-item ${n.page ? 'notif-clickable' : ''}" ${n.page ? `data-page="${n.page}" data-id="${n.pageId}"` : ''}>
+                  <div class="notif-icon">${n.icon}</div>
+                  <div class="notif-content">
+                    <div class="notif-title">${n.title}</div>
+                    <div class="notif-text">${n.text}</div>
+                    <div class="notif-time">${n.time}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>`}
+      </div>
+    `;
+  },
+
+  // ============ MESSENGER ============
+  renderMessenger() {
+    const user = this.currentUser;
+    const users = DB.getUsers().filter(u => u.id !== user.id);
+    const chatWith = this.messengerChatWith;
+    const chatUser = chatWith ? DB.getUserById(chatWith) : null;
+
+    let messages = [];
+    if (chatWith) {
+      messages = DB.getConversation(user.id, chatWith);
+      // Mark as read
+      messages.forEach(m => {
+        if (m.toUserId === user.id && !m.read) {
+          DB.markMessageRead(m.id);
+        }
+      });
+    }
+
+    // Group conversations
+    const conversations = [];
+    const seen = new Set();
+    const allMessages = DB.getUserMessages(user.id);
+    allMessages.forEach(m => {
+      const otherId = m.fromUserId === user.id ? m.toUserId : m.fromUserId;
+      if (!seen.has(otherId)) {
+        seen.add(otherId);
+        const other = DB.getUserById(otherId);
+        const unread = allMessages.filter(x => x.fromUserId === otherId && x.toUserId === user.id && !x.read).length;
+        conversations.push({ user: other, lastMessage: m, unread });
+      }
+    });
+
+    return `
+      <div class="messenger-page">
+        <div class="messenger-layout">
+          <div class="messenger-sidebar ${chatWith ? 'messenger-sidebar-hidden-mobile' : ''}">
+            <div class="messenger-search">
+              <input type="text" id="messengerSearch" placeholder="Поиск сотрудника..." class="search-input">
+            </div>
+            <div class="messenger-contacts" id="messengerContacts">
+              ${users.map(u => {
+                const conv = conversations.find(c => c.user?.id === u.id);
+                const unread = conv?.unread || 0;
+                return `
+                  <div class="messenger-contact ${chatWith === u.id ? 'active' : ''}" data-chat-user="${u.id}">
+                    <div class="avatar" style="width:36px;height:36px;font-size:12px;">${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                    <div class="messenger-contact-info">
+                      <div class="messenger-contact-name">${u.name.split(' ').slice(0, 2).join(' ')}</div>
+                      <div class="messenger-contact-role">${u.specialty || DB.ROLE_LABELS[u.role]}</div>
+                    </div>
+                    ${unread > 0 ? `<span class="nav-badge">${unread}</span>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+          <div class="messenger-chat ${!chatWith ? 'messenger-chat-empty' : ''}">
+            ${!chatWith ? `
+              <div class="messenger-empty">
+                <div style="font-size:48px;margin-bottom:16px;">💬</div>
+                <p>Выберите сотрудника для начала разговора</p>
+              </div>
+            ` : `
+              <div class="messenger-chat-header">
+                <button class="btn btn-sm btn-ghost messenger-back-btn" id="messengerBackBtn">←</button>
+                <div class="avatar" style="width:32px;height:32px;font-size:11px;">${chatUser?.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                <div>
+                  <strong>${chatUser?.name.split(' ').slice(0, 2).join(' ')}</strong>
+                  <div style="font-size:12px;color:var(--gray-500);">${chatUser?.specialty || ''}</div>
+                </div>
+              </div>
+              <div class="messenger-messages" id="messengerMessages">
+                ${messages.length === 0 ? '<p class="empty-text" style="margin-top:40px;">Начните разговор</p>' : messages.map(m => `
+                  <div class="message ${m.fromUserId === user.id ? 'message-own' : 'message-other'}">
+                    <div class="message-bubble">${m.text}</div>
+                    <div class="message-time">${this.formatMessageTime(m.createdAt)}</div>
+                  </div>
+                `).join('')}
+              </div>
+              <form class="messenger-input-form" id="messengerForm">
+                <input type="text" id="messengerInput" placeholder="Введите сообщение..." autocomplete="off" required>
+                <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
+              </form>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  formatMessageTime(dateStr) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) {
+      return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   },
 
   // ============ USERS (ADMIN) ============
@@ -1450,22 +1797,50 @@ const App = {
       this.navigate('profile');
     });
 
-    // Avatar upload
+    // Avatar upload with validation & spinner
     document.getElementById('avatarInput')?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      const url = await DB.uploadAvatar(this.currentUser.id, file);
-      if (url) {
-        this.currentUser = DB.getUserById(this.currentUser.id);
-        this.render();
+      const errors = this.validateImageFile(file);
+      if (errors.length > 0) {
+        alert(errors.join('\n'));
+        e.target.value = '';
+        return;
+      }
+      const avatarSection = document.querySelector('.profile-avatar-section');
+      if (avatarSection) {
+        const origHTML = avatarSection.innerHTML;
+        avatarSection.innerHTML = '<div class="spinner-inline"><div class="spinner"></div><span class="spinner-text">Загрузка фото...</span></div>';
+        const url = await DB.uploadAvatar(this.currentUser.id, file);
+        if (url) {
+          this.currentUser = DB.getUserById(this.currentUser.id);
+          this.render();
+        } else {
+          avatarSection.innerHTML = origHTML;
+          alert('Ошибка загрузки аватара');
+        }
       }
     });
 
-    // Task file upload
+    // Task file upload with validation & spinner
     document.getElementById('taskFileInput')?.addEventListener('change', async (e) => {
       const files = e.target.files;
       if (!files.length) return;
+      const allErrors = [];
+      for (const file of files) {
+        const errors = this.validateFile(file);
+        if (errors.length > 0) allErrors.push(...errors);
+      }
+      if (allErrors.length > 0) {
+        alert('Ошибки валидации:\n' + allErrors.join('\n'));
+        e.target.value = '';
+        return;
+      }
       const taskId = this.params.id;
+      const uploadSection = document.querySelector('.attachment-upload');
+      if (uploadSection) {
+        uploadSection.innerHTML = '<div class="spinner-inline"><div class="spinner"></div><span class="spinner-text">Загрузка файлов...</span></div>';
+      }
       for (const file of files) {
         await DB.uploadTaskFile(taskId, file, this.currentUser.id);
       }
@@ -1577,6 +1952,109 @@ const App = {
       document.getElementById('ratingModal')?.classList.add('hidden');
       this.render();
     });
+
+    // Store: buy product
+    document.querySelectorAll('.buy-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const productId = btn.dataset.productId;
+        const product = DB.getStoreProducts().find(p => p.id === productId);
+        if (!product) return;
+        if (this.currentUser.coins < product.price) {
+          alert('Недостаточно Ист Коинов');
+          return;
+        }
+        if (confirm(`Купить "${product.name}" за ${product.price} ◆?`)) {
+          DB.purchaseProduct(this.currentUser.id, productId);
+          this.currentUser = DB.getUserById(this.currentUser.id);
+          this.render();
+        }
+      });
+    });
+
+    // Store: add product form
+    document.getElementById('addProductForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const stock = document.getElementById('productStock')?.value;
+      DB.addStoreProduct({
+        name: document.getElementById('productName').value,
+        icon: document.getElementById('productIcon').value,
+        description: document.getElementById('productDesc').value,
+        price: parseInt(document.getElementById('productPrice').value),
+        stock: stock ? parseInt(stock) : null,
+        active: true,
+        createdBy: this.currentUser.id,
+        createdAt: new Date().toISOString()
+      });
+      this.render();
+    });
+
+    // Store: toggle product
+    document.querySelectorAll('.toggle-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const product = DB.getStoreProducts().find(p => p.id === btn.dataset.productId);
+        if (product) {
+          DB.updateStoreProduct(product.id, { active: !product.active });
+          this.render();
+        }
+      });
+    });
+
+    // Store: delete product
+    document.querySelectorAll('.delete-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Удалить товар?')) {
+          DB.deleteStoreProduct(btn.dataset.productId);
+          this.render();
+        }
+      });
+    });
+
+    // Messenger: select contact
+    document.querySelectorAll('.messenger-contact').forEach(el => {
+      el.addEventListener('click', () => {
+        this.messengerChatWith = el.dataset.chatUser;
+        this.render();
+        // Scroll to bottom
+        const msgs = document.getElementById('messengerMessages');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      });
+    });
+
+    // Messenger: send message
+    document.getElementById('messengerForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('messengerInput');
+      const text = input.value.trim();
+      if (!text || !this.messengerChatWith) return;
+      DB.addMessage({
+        fromUserId: this.currentUser.id,
+        toUserId: this.messengerChatWith,
+        text,
+        read: false,
+        createdAt: new Date().toISOString()
+      });
+      input.value = '';
+      this.render();
+      const msgs = document.getElementById('messengerMessages');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    });
+
+    // Messenger: back button (mobile)
+    document.getElementById('messengerBackBtn')?.addEventListener('click', () => {
+      this.messengerChatWith = null;
+      this.render();
+    });
+
+    // Messenger: search
+    document.getElementById('messengerSearch')?.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      document.querySelectorAll('.messenger-contact').forEach(el => {
+        const name = el.querySelector('.messenger-contact-name')?.textContent.toLowerCase() || '';
+        el.style.display = name.includes(query) ? '' : 'none';
+      });
+    });
+
+    // Sidebar coins click -> wallet (already handled by data-page)
 
     // Add user button
     document.getElementById('addUserBtn')?.addEventListener('click', () => {
