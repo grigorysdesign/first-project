@@ -374,11 +374,11 @@ const DB = {
   // User methods
   // ============================================
   getUsers() { return this._cache.users; },
-  getUserById(id) { return this._cache.users.find(u => u.id === id); },
+  getUserById(id) { return this._cache.users.find(u => String(u.id) === String(id)); },
 
   updateUser(id, updates) {
     const users = this._cache.users;
-    const idx = users.findIndex(u => u.id === id);
+    const idx = users.findIndex(u => String(u.id) === String(id));
     if (idx !== -1) {
       users[idx] = { ...users[idx], ...updates };
       this._sync('users', 'upsert', users[idx]);
@@ -398,11 +398,11 @@ const DB = {
   // Task methods
   // ============================================
   getTasks() { return this._cache.tasks; },
-  getTaskById(id) { return this._cache.tasks.find(t => t.id === id); },
+  getTaskById(id) { return this._cache.tasks.find(t => String(t.id) === String(id)); },
 
   updateTask(id, updates) {
     const tasks = this._cache.tasks;
-    const idx = tasks.findIndex(t => t.id === id);
+    const idx = tasks.findIndex(t => String(t.id) === String(id));
     if (idx !== -1) {
       tasks[idx] = { ...tasks[idx], ...updates };
       this._sync('tasks', 'upsert', tasks[idx]);
@@ -419,7 +419,7 @@ const DB = {
   },
 
   deleteTask(id) {
-    this._cache.tasks = this._cache.tasks.filter(t => t.id !== id);
+    this._cache.tasks = this._cache.tasks.filter(t => String(t.id) !== String(id));
     this._sync('tasks', 'delete', { id });
   },
 
@@ -436,7 +436,7 @@ const DB = {
   },
 
   deleteNews(id) {
-    this._cache.news = this._cache.news.filter(n => n.id !== id);
+    this._cache.news = this._cache.news.filter(n => String(n.id) !== String(id));
     this._sync('news', 'delete', { id });
   },
 
@@ -454,7 +454,7 @@ const DB = {
 
   updateKBArticle(id, updates) {
     const kb = this._cache.kb;
-    const idx = kb.findIndex(a => a.id === id);
+    const idx = kb.findIndex(a => String(a.id) === String(id));
     if (idx !== -1) {
       kb[idx] = { ...kb[idx], ...updates };
       this._sync('knowledge_base', 'upsert', kb[idx]);
@@ -464,7 +464,7 @@ const DB = {
   },
 
   deleteKBArticle(id) {
-    this._cache.kb = this._cache.kb.filter(a => a.id !== id);
+    this._cache.kb = this._cache.kb.filter(a => String(a.id) !== String(id));
     this._sync('knowledge_base', 'delete', { id });
   },
 
@@ -472,7 +472,7 @@ const DB = {
   // Transaction methods
   // ============================================
   getTransactions() { return this._cache.transactions; },
-  getUserTransactions(userId) { return this._cache.transactions.filter(t => t.userId === userId); },
+  getUserTransactions(userId) { return this._cache.transactions.filter(t => String(t.userId) === String(userId)); },
 
   addTransaction(transaction) {
     transaction.id = 'tr' + Date.now();
@@ -484,7 +484,7 @@ const DB = {
   // ============================================
   // To-Do List methods
   // ============================================
-  getUserTodos(userId) { return this._cache.todos.filter(t => t.userId === userId); },
+  getUserTodos(userId) { return this._cache.todos.filter(t => String(t.userId) === String(userId)); },
 
   addTodo(todo) {
     todo.id = 'td' + Date.now();
@@ -494,7 +494,7 @@ const DB = {
   },
 
   updateTodo(id, updates) {
-    const idx = this._cache.todos.findIndex(t => t.id === id);
+    const idx = this._cache.todos.findIndex(t => String(t.id) === String(id));
     if (idx !== -1) {
       this._cache.todos[idx] = { ...this._cache.todos[idx], ...updates };
       this._sync('user_todos', 'upsert', this._cache.todos[idx]);
@@ -504,14 +504,14 @@ const DB = {
   },
 
   deleteTodo(id) {
-    this._cache.todos = this._cache.todos.filter(t => t.id !== id);
+    this._cache.todos = this._cache.todos.filter(t => String(t.id) !== String(id));
     this._sync('user_todos', 'delete', { id });
   },
 
   // ============================================
   // Task Attachments methods
   // ============================================
-  getTaskAttachments(taskId) { return this._cache.taskAttachments.filter(a => a.taskId === taskId); },
+  getTaskAttachments(taskId) { return this._cache.taskAttachments.filter(a => String(a.taskId) === String(taskId)); },
 
   addTaskAttachment(attachment) {
     attachment.id = 'att' + Date.now();
@@ -521,14 +521,14 @@ const DB = {
   },
 
   deleteTaskAttachment(id) {
-    this._cache.taskAttachments = this._cache.taskAttachments.filter(a => a.id !== id);
+    this._cache.taskAttachments = this._cache.taskAttachments.filter(a => String(a.id) !== String(id));
     this._sync('task_attachments', 'delete', { id });
   },
 
   // ============================================
   // User Ratings methods
   // ============================================
-  getUserRatings(userId) { return this._cache.userRatings.filter(r => r.userId === userId); },
+  getUserRatings(userId) { return this._cache.userRatings.filter(r => String(r.userId) === String(userId)); },
 
   getAverageRating(userId) {
     const ratings = this.getUserRatings(userId);
@@ -538,7 +538,7 @@ const DB = {
 
   addUserRating(rating) {
     // Обновляем если уже оценивал
-    const existing = this._cache.userRatings.find(r => r.userId === rating.userId && r.ratedBy === rating.ratedBy);
+    const existing = this._cache.userRatings.find(r => String(r.userId) === String(rating.userId) && String(r.ratedBy) === String(rating.ratedBy));
     if (existing) {
       existing.score = rating.score;
       existing.comment = rating.comment;
@@ -669,7 +669,7 @@ const DB = {
   },
 
   updateStoreProduct(id, updates) {
-    const idx = this._cache.storeProducts.findIndex(p => p.id === id);
+    const idx = this._cache.storeProducts.findIndex(p => String(p.id) === String(id));
     if (idx !== -1) {
       this._cache.storeProducts[idx] = { ...this._cache.storeProducts[idx], ...updates };
       this._sync('store_products', 'upsert', this._cache.storeProducts[idx]);
@@ -679,17 +679,17 @@ const DB = {
   },
 
   deleteStoreProduct(id) {
-    this._cache.storeProducts = this._cache.storeProducts.filter(p => p.id !== id);
+    this._cache.storeProducts = this._cache.storeProducts.filter(p => String(p.id) !== String(id));
     this._sync('store_products', 'delete', { id });
   },
 
   // ============================================
   // Purchases methods
   // ============================================
-  getUserPurchases(userId) { return this._cache.purchases.filter(p => p.userId === userId); },
+  getUserPurchases(userId) { return this._cache.purchases.filter(p => String(p.userId) === String(userId)); },
 
   purchaseProduct(userId, productId) {
-    const product = this._cache.storeProducts.find(p => p.id === productId);
+    const product = this._cache.storeProducts.find(p => String(p.id) === String(productId));
     if (!product) return null;
     const user = this.getUserById(userId);
     if (!user || user.coins < product.price) return null;
@@ -733,13 +733,16 @@ const DB = {
   // Messages methods
   // ============================================
   getUserMessages(userId) {
-    return this._cache.messages.filter(m => m.fromUserId === userId || m.toUserId === userId);
+    const uid = String(userId);
+    return this._cache.messages.filter(m => String(m.fromUserId) === uid || String(m.toUserId) === uid);
   },
 
   getConversation(userId1, userId2) {
+    const u1 = String(userId1);
+    const u2 = String(userId2);
     return this._cache.messages.filter(m =>
-      (m.fromUserId === userId1 && m.toUserId === userId2) ||
-      (m.fromUserId === userId2 && m.toUserId === userId1)
+      (String(m.fromUserId) === u1 && String(m.toUserId) === u2) ||
+      (String(m.fromUserId) === u2 && String(m.toUserId) === u1)
     );
   },
 
@@ -751,7 +754,7 @@ const DB = {
   },
 
   markMessageRead(id) {
-    const idx = this._cache.messages.findIndex(m => m.id === id);
+    const idx = this._cache.messages.findIndex(m => String(m.id) === String(id));
     if (idx !== -1) {
       this._cache.messages[idx].read = true;
       this._sync('messages', 'upsert', this._cache.messages[idx]);

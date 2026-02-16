@@ -433,7 +433,7 @@ const App = {
           <div class="stat-card stat-blue">
             <div class="stat-icon">💬</div>
             <div class="stat-info">
-              <div class="stat-value">${DB.getUserMessages(user.id).filter(m => !m.read && m.toUserId === user.id).length}</div>
+              <div class="stat-value">${DB.getUserMessages(user.id).filter(m => !m.read && String(m.toUserId) === String(user.id)).length}</div>
               <div class="stat-label">Новых сообщений</div>
             </div>
           </div>
@@ -1423,7 +1423,7 @@ const App = {
       messages = DB.getConversation(user.id, chatWith);
       // Mark as read
       messages.forEach(m => {
-        if (m.toUserId === user.id && !m.read) {
+        if (String(m.toUserId) === String(user.id) && !m.read) {
           DB.markMessageRead(m.id);
         }
       });
@@ -1434,11 +1434,11 @@ const App = {
     const seen = new Set();
     const allMessages = DB.getUserMessages(user.id);
     allMessages.forEach(m => {
-      const otherId = m.fromUserId === user.id ? m.toUserId : m.fromUserId;
+      const otherId = String(m.fromUserId) === String(user.id) ? m.toUserId : m.fromUserId;
       if (!seen.has(otherId)) {
         seen.add(otherId);
         const other = DB.getUserById(otherId);
-        const unread = allMessages.filter(x => x.fromUserId === otherId && x.toUserId === user.id && !x.read).length;
+        const unread = allMessages.filter(x => String(x.fromUserId) === String(otherId) && String(x.toUserId) === String(user.id) && !x.read).length;
         conversations.push({ user: other, lastMessage: m, unread });
       }
     });
@@ -1455,7 +1455,7 @@ const App = {
                 const conv = conversations.find(c => c.user?.id === u.id);
                 const unread = conv?.unread || 0;
                 return `
-                  <div class="messenger-contact ${chatWith === u.id ? 'active' : ''}" data-chat-user="${u.id}">
+                  <div class="messenger-contact ${String(chatWith) === String(u.id) ? 'active' : ''}" data-chat-user="${u.id}">
                     <div class="avatar" style="width:36px;height:36px;font-size:12px;">${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
                     <div class="messenger-contact-info">
                       <div class="messenger-contact-name">${u.name.split(' ').slice(0, 2).join(' ')}</div>
@@ -1476,15 +1476,15 @@ const App = {
             ` : `
               <div class="messenger-chat-header">
                 <button class="btn btn-sm btn-ghost messenger-back-btn" id="messengerBackBtn">←</button>
-                <div class="avatar" style="width:32px;height:32px;font-size:11px;">${chatUser?.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                <div class="avatar" style="width:32px;height:32px;font-size:11px;">${chatUser ? chatUser.name.split(' ').map(n => n[0]).join('').slice(0, 2) : '?'}</div>
                 <div>
-                  <strong>${chatUser?.name.split(' ').slice(0, 2).join(' ')}</strong>
+                  <strong>${chatUser ? chatUser.name.split(' ').slice(0, 2).join(' ') : 'Пользователь'}</strong>
                   <div style="font-size:12px;color:var(--gray-500);">${chatUser?.specialty || ''}</div>
                 </div>
               </div>
               <div class="messenger-messages" id="messengerMessages">
                 ${messages.length === 0 ? '<p class="empty-text" style="margin-top:40px;">Начните разговор</p>' : messages.map(m => `
-                  <div class="message ${m.fromUserId === user.id ? 'message-own' : 'message-other'}">
+                  <div class="message ${String(m.fromUserId) === String(user.id) ? 'message-own' : 'message-other'}">
                     <div class="message-bubble">${m.text}</div>
                     <div class="message-time">${this.formatMessageTime(m.createdAt)}</div>
                   </div>
