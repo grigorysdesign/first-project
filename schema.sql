@@ -231,3 +231,18 @@ INSERT INTO users (login, password, name, role, specialty, coins, rating, tasks_
     ('doctor',  '$2b$10$ХЕШПАРОЛЯ', 'Сидоров Алексей Николаевич',    'doctor',      'Терапия',       320, 4.5, 28, '1985-02-16'),
     ('doctor2', '$2b$10$ХЕШПАРОЛЯ', 'Козлова Мария Ивановна',        'doctor',      'Неврология',    180, 4.2, 15, '1990-11-08'),
     ('intern',  '$2b$10$ХЕШПАРОЛЯ', 'Новиков Дмитрий Александрович', 'intern',      'Хирургия',      50,  3.8, 5,  '1998-06-30');
+
+-- =====================
+-- МИГРАЦИИ: недостающие колонки
+-- Выполните эти запросы в Supabase SQL Editor
+-- =====================
+
+-- Категория товара в магазине
+ALTER TABLE store_products ADD COLUMN IF NOT EXISTS category VARCHAR(30) DEFAULT 'other';
+
+-- Файловые вложения в сообщениях
+ALTER TABLE messages ALTER COLUMN text DROP NOT NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_url TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_size INTEGER;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_type VARCHAR(100);

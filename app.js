@@ -2188,7 +2188,7 @@ const App = {
       const msg = {
         fromUserId: this.currentUser.id,
         toUserId: this.messengerChatWith,
-        text: text || null,
+        text: text || '',
         read: false,
         fileName: null,
         fileUrl: null,

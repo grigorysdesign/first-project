@@ -1493,6 +1493,37 @@ a:hover { text-decoration: underline; }
 }
 .message-file-size { font-size: 11px; opacity: 0.7; }
 
+/* ============ SYNC ERROR TOAST ============ */
+.sync-error-toast {
+  position: fixed;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #991b1b;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: top 0.3s ease;
+  max-width: 90vw;
+}
+.sync-error-toast.visible { top: 16px; }
+.sync-error-toast button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+.sync-error-toast button:hover { opacity: 1; }
+
 /* ============ MOBILE MESSENGER ============ */
 @media (max-width: 768px) {
   .messenger-sidebar {

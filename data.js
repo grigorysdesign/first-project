@@ -362,21 +362,71 @@ const DB = {
 
     const dbData = mapToDb[table] ? mapToDb[table](data) : data;
 
-    let promise;
-    if (action === 'upsert') {
-      promise = supabaseClient.from(table).upsert(dbData);
-    } else if (action === 'delete') {
-      promise = supabaseClient.from(table).delete().eq('id', data.id || data);
-    } else if (action === 'insert') {
-      promise = supabaseClient.from(table).insert(dbData);
-    }
+    const doSync = async (attempt = 1) => {
+      let promise;
+      if (action === 'upsert') {
+        promise = supabaseClient.from(table).upsert(dbData);
+      } else if (action === 'delete') {
+        promise = supabaseClient.from(table).delete().eq('id', data.id || data);
+      } else if (action === 'insert') {
+        promise = supabaseClient.from(table).insert(dbData);
+      }
 
-    if (promise) {
-      promise.then(({ error }) => {
-        if (error) console.error(`❌ Sync error (${table}/${action}):`, error.message);
-        else console.log(`✅ Synced: ${table}/${action}`);
-      });
+      if (!promise) return;
+
+      const { error } = await promise;
+      if (error) {
+        console.error(`❌ Sync error (${table}/${action}, attempt ${attempt}):`, error.message);
+        // Retry up to 3 times for network/timeout errors
+        if (attempt < 3 && (error.message.includes('fetch') || error.message.includes('network') || error.message.includes('timeout'))) {
+          const delay = attempt * 2000;
+          console.log(`🔄 Retrying in ${delay}ms...`);
+          setTimeout(() => doSync(attempt + 1), delay);
+          return;
+        }
+        // Show visible notification for persistent errors
+        this._showSyncError(table, action, error.message);
+      } else {
+        console.log(`✅ Synced: ${table}/${action}`);
+        // Remove error notification on success
+        this._hideSyncError();
+      }
+    };
+
+    doSync();
+  },
+
+  _syncErrorTimeout: null,
+
+  _showSyncError(table, action, msg) {
+    // Show a non-intrusive toast at the top of the page
+    let toast = document.getElementById('syncErrorToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'syncErrorToast';
+      toast.className = 'sync-error-toast';
+      document.body.appendChild(toast);
     }
+    const tableLabels = {
+      users: 'Пользователи', tasks: 'Задачи', news: 'Новости',
+      knowledge_base: 'База знаний', transactions: 'Транзакции',
+      user_todos: 'Задачи', task_attachments: 'Вложения',
+      user_ratings: 'Рейтинг', store_products: 'Магазин',
+      purchases: 'Покупки', messages: 'Сообщения'
+    };
+    toast.innerHTML = `
+      <span>⚠️ Ошибка сохранения (${tableLabels[table] || table}): ${msg}</span>
+      <button onclick="this.parentElement.remove()">✕</button>
+    `;
+    toast.classList.add('visible');
+    // Auto-hide after 8 seconds
+    clearTimeout(this._syncErrorTimeout);
+    this._syncErrorTimeout = setTimeout(() => this._hideSyncError(), 8000);
+  },
+
+  _hideSyncError() {
+    const toast = document.getElementById('syncErrorToast');
+    if (toast) toast.classList.remove('visible');
   },
 
   // ============================================
