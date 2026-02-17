@@ -433,7 +433,7 @@ const App = {
           <div class="stat-card stat-blue">
             <div class="stat-icon">💬</div>
             <div class="stat-info">
-              <div class="stat-value">${DB.getUserMessages(user.id).filter(m => !m.read && m.toUserId === user.id).length}</div>
+              <div class="stat-value">${DB.getUserMessages(user.id).filter(m => !m.read && String(m.toUserId) === String(user.id)).length}</div>
               <div class="stat-label">Новых сообщений</div>
             </div>
           </div>
@@ -632,7 +632,11 @@ const App = {
               <div class="attachments-list">
                 ${attachments.map(a => `
                   <div class="attachment-item">
-                    <span class="attachment-icon">${this.getFileIcon(a.fileType)}</span>
+                    ${a.fileType && a.fileType.startsWith('image/') && a.fileUrl ? `
+                      <div class="attachment-thumb">
+                        <img src="${a.fileUrl}" alt="${a.fileName}" loading="lazy">
+                      </div>
+                    ` : `<span class="attachment-icon">${this.getFileIcon(a.fileType)}</span>`}
                     <div class="attachment-info">
                       <a href="${a.fileUrl}" target="_blank" class="attachment-name">${a.fileName}</a>
                       <span class="attachment-size">${this.formatFileSize(a.fileSize)}</span>
@@ -643,9 +647,18 @@ const App = {
               </div>
             ` : '<p class="empty-text">Нет вложений</p>'}
             ${canUpload && task.status !== 'completed' ? `
-              <div class="attachment-upload">
-                <label class="btn btn-sm btn-ghost" for="taskFileInput">+ Загрузить файл</label>
-                <input type="file" id="taskFileInput" class="hidden" multiple>
+              <div class="attachment-upload-zone" id="dropZone">
+                <div class="drop-zone-content">
+                  <span class="drop-zone-icon">📁</span>
+                  <span class="drop-zone-text">Перетащите файлы сюда или</span>
+                  <label class="btn btn-sm btn-primary" for="taskFileInput">Выберите файлы</label>
+                  <input type="file" id="taskFileInput" class="hidden" multiple>
+                  <span class="drop-zone-hint">Макс. 10 МБ. Форматы: изображения, PDF, DOC, XLS, PPT, TXT, CSV</span>
+                </div>
+                <div class="drop-zone-progress hidden" id="uploadProgress">
+                  <div class="spinner"></div>
+                  <span class="spinner-text" id="uploadProgressText">Загрузка файлов...</span>
+                </div>
               </div>
             ` : ''}
           </div>
@@ -1276,6 +1289,9 @@ const App = {
     const user = this.currentUser;
     const products = DB.getStoreProducts();
     const canManage = this.hasPermission('manage_users');
+    const storeFilter = this.params.storeCategory || 'all';
+    const activeProducts = products.filter(p => p.active);
+    const filtered = storeFilter === 'all' ? activeProducts : activeProducts.filter(p => p.category === storeFilter);
 
     return `
       <div class="store-page">
@@ -1287,11 +1303,17 @@ const App = {
           <span>Ваш баланс:</span>
           <strong>${user.coins} ◆ Ист Коинов</strong>
         </div>
+        <div class="filter-tabs" style="margin-bottom:16px;">
+          ${Object.entries(DB.STORE_CATEGORIES).map(([k, v]) => `
+            <button class="tab ${storeFilter === k ? 'active' : ''}" data-store-filter="${k}">${v}</button>
+          `).join('')}
+        </div>
         <div class="store-grid">
-          ${products.length === 0
-            ? '<div class="empty-state"><p>Товары пока не добавлены</p></div>'
-            : products.filter(p => p.active).map(p => `
+          ${filtered.length === 0
+            ? '<div class="empty-state"><p>Нет товаров в этой категории</p></div>'
+            : filtered.map(p => `
               <div class="store-product-card">
+                <div class="store-product-category-badge">${DB.STORE_CATEGORIES[p.category] || 'Другое'}</div>
                 <div class="store-product-icon">${p.icon}</div>
                 <h4 class="store-product-title">${p.name}</h4>
                 <p class="store-product-desc">${p.description}</p>
@@ -1335,48 +1357,65 @@ const App = {
 
   renderStoreManage() {
     const products = DB.getStoreProducts();
+    const editingProduct = this.params.editProductId ? DB.getStoreProducts().find(p => String(p.id) === String(this.params.editProductId)) : null;
+
     return `
       <div class="detail-page">
         <button class="btn btn-ghost" data-page="store">← Назад в магазин</button>
         <div class="detail-card">
           <h2>Управление товарами</h2>
-          <form id="addProductForm" class="form" style="margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--gray-200);">
-            <h4 style="margin-bottom:12px;">Добавить товар</h4>
+          <form id="${editingProduct ? 'editProductForm' : 'addProductForm'}" class="form" style="margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--gray-200);">
+            <h4 style="margin-bottom:12px;">${editingProduct ? 'Редактировать товар' : 'Добавить товар'}</h4>
+            ${editingProduct ? `<input type="hidden" id="editProductId" value="${editingProduct.id}">` : ''}
             <div class="form-row">
               <div class="form-group">
                 <label>Название</label>
-                <input type="text" id="productName" required placeholder="Название товара">
+                <input type="text" id="productName" required placeholder="Название товара" value="${editingProduct ? editingProduct.name : ''}">
               </div>
               <div class="form-group">
                 <label>Иконка (эмодзи)</label>
-                <input type="text" id="productIcon" value="🎁" required placeholder="🎁">
+                <input type="text" id="productIcon" value="${editingProduct ? editingProduct.icon : '🎁'}" required placeholder="🎁">
               </div>
             </div>
             <div class="form-group">
               <label>Описание</label>
-              <textarea id="productDesc" rows="2" required placeholder="Описание товара"></textarea>
+              <textarea id="productDesc" rows="2" required placeholder="Описание товара">${editingProduct ? editingProduct.description : ''}</textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Цена (Ист Коины)</label>
-                <input type="number" id="productPrice" min="1" max="10000" value="100" required>
+                <label>Категория</label>
+                <select id="productCategory">
+                  ${Object.entries(DB.STORE_CATEGORIES).filter(([k]) => k !== 'all').map(([k, v]) => `
+                    <option value="${k}" ${editingProduct && editingProduct.category === k ? 'selected' : ''}>${v}</option>
+                  `).join('')}
+                </select>
               </div>
               <div class="form-group">
-                <label>Кол-во (пусто = безлимит)</label>
-                <input type="number" id="productStock" min="0" placeholder="Безлимитно">
+                <label>Цена (Ист Коины)</label>
+                <input type="number" id="productPrice" min="1" max="10000" value="${editingProduct ? editingProduct.price : 100}" required>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary">Добавить товар</button>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Кол-во (пусто = безлимит)</label>
+                <input type="number" id="productStock" min="0" placeholder="Безлимитно" ${editingProduct && editingProduct.stock !== null ? `value="${editingProduct.stock}"` : ''}>
+              </div>
+            </div>
+            <div class="detail-actions">
+              <button type="submit" class="btn btn-primary">${editingProduct ? 'Сохранить' : 'Добавить товар'}</button>
+              ${editingProduct ? '<button type="button" class="btn btn-ghost" id="cancelEditProduct">Отмена</button>' : ''}
+            </div>
           </form>
-          <h4>Текущие товары</h4>
+          <h4>Текущие товары (${products.length})</h4>
           <div style="margin-top:12px;">
             ${products.length === 0 ? '<p class="empty-text">Нет товаров</p>' : products.map(p => `
-              <div class="store-manage-item">
+              <div class="store-manage-item ${!p.active ? 'store-manage-inactive' : ''}">
                 <span class="store-manage-icon">${p.icon}</span>
                 <div class="store-manage-info">
                   <strong>${p.name}</strong>
-                  <span>${p.price} ◆ ${p.stock !== null ? `(${p.stock} шт.)` : '(безлимит)'} ${p.active ? '' : '— неактивен'}</span>
+                  <span>${p.price} ◆ | ${DB.STORE_CATEGORIES[p.category] || 'Другое'} | ${p.stock !== null ? `${p.stock} шт.` : 'безлимит'} ${p.active ? '' : '— неактивен'}</span>
                 </div>
+                <button class="btn btn-sm btn-ghost edit-product-btn" data-product-id="${p.id}" title="Редактировать">✎</button>
                 <button class="btn btn-sm btn-ghost toggle-product-btn" data-product-id="${p.id}">${p.active ? 'Скрыть' : 'Показать'}</button>
                 <button class="btn btn-sm btn-danger delete-product-btn" data-product-id="${p.id}">✕</button>
               </div>
@@ -1423,7 +1462,7 @@ const App = {
       messages = DB.getConversation(user.id, chatWith);
       // Mark as read
       messages.forEach(m => {
-        if (m.toUserId === user.id && !m.read) {
+        if (String(m.toUserId) === String(user.id) && !m.read) {
           DB.markMessageRead(m.id);
         }
       });
@@ -1434,11 +1473,11 @@ const App = {
     const seen = new Set();
     const allMessages = DB.getUserMessages(user.id);
     allMessages.forEach(m => {
-      const otherId = m.fromUserId === user.id ? m.toUserId : m.fromUserId;
+      const otherId = String(m.fromUserId) === String(user.id) ? m.toUserId : m.fromUserId;
       if (!seen.has(otherId)) {
         seen.add(otherId);
         const other = DB.getUserById(otherId);
-        const unread = allMessages.filter(x => x.fromUserId === otherId && x.toUserId === user.id && !x.read).length;
+        const unread = allMessages.filter(x => String(x.fromUserId) === String(otherId) && String(x.toUserId) === String(user.id) && !x.read).length;
         conversations.push({ user: other, lastMessage: m, unread });
       }
     });
@@ -1455,7 +1494,7 @@ const App = {
                 const conv = conversations.find(c => c.user?.id === u.id);
                 const unread = conv?.unread || 0;
                 return `
-                  <div class="messenger-contact ${chatWith === u.id ? 'active' : ''}" data-chat-user="${u.id}">
+                  <div class="messenger-contact ${String(chatWith) === String(u.id) ? 'active' : ''}" data-chat-user="${u.id}">
                     <div class="avatar" style="width:36px;height:36px;font-size:12px;">${u.avatar ? `<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : u.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
                     <div class="messenger-contact-info">
                       <div class="messenger-contact-name">${u.name.split(' ').slice(0, 2).join(' ')}</div>
@@ -1476,22 +1515,45 @@ const App = {
             ` : `
               <div class="messenger-chat-header">
                 <button class="btn btn-sm btn-ghost messenger-back-btn" id="messengerBackBtn">←</button>
-                <div class="avatar" style="width:32px;height:32px;font-size:11px;">${chatUser?.name.split(' ').map(n => n[0]).join('').slice(0, 2)}</div>
+                <div class="avatar" style="width:32px;height:32px;font-size:11px;">${chatUser ? chatUser.name.split(' ').map(n => n[0]).join('').slice(0, 2) : '?'}</div>
                 <div>
-                  <strong>${chatUser?.name.split(' ').slice(0, 2).join(' ')}</strong>
+                  <strong>${chatUser ? chatUser.name.split(' ').slice(0, 2).join(' ') : 'Пользователь'}</strong>
                   <div style="font-size:12px;color:var(--gray-500);">${chatUser?.specialty || ''}</div>
                 </div>
               </div>
               <div class="messenger-messages" id="messengerMessages">
                 ${messages.length === 0 ? '<p class="empty-text" style="margin-top:40px;">Начните разговор</p>' : messages.map(m => `
-                  <div class="message ${m.fromUserId === user.id ? 'message-own' : 'message-other'}">
-                    <div class="message-bubble">${m.text}</div>
+                  <div class="message ${String(m.fromUserId) === String(user.id) ? 'message-own' : 'message-other'}">
+                    <div class="message-bubble">
+                      ${m.text ? `<span>${m.text}</span>` : ''}
+                      ${m.fileUrl ? `
+                        <div class="message-file">
+                          ${m.fileType && m.fileType.startsWith('image/') ? `
+                            <a href="${m.fileUrl}" target="_blank" class="message-image-preview">
+                              <img src="${m.fileUrl}" alt="${m.fileName}" loading="lazy">
+                            </a>
+                          ` : `
+                            <a href="${m.fileUrl}" target="_blank" class="message-file-link">
+                              <span class="message-file-icon">${this.getFileIcon(m.fileType)}</span>
+                              <span class="message-file-name">${m.fileName}</span>
+                              <span class="message-file-size">${this.formatFileSize(m.fileSize)}</span>
+                            </a>
+                          `}
+                        </div>
+                      ` : ''}
+                    </div>
                     <div class="message-time">${this.formatMessageTime(m.createdAt)}</div>
                   </div>
                 `).join('')}
               </div>
+              <div class="messenger-file-preview hidden" id="messengerFilePreview">
+                <span class="messenger-file-preview-name" id="messengerFileName"></span>
+                <button type="button" class="btn btn-sm btn-ghost" id="messengerFileRemove">✕</button>
+              </div>
               <form class="messenger-input-form" id="messengerForm">
-                <input type="text" id="messengerInput" placeholder="Введите сообщение..." autocomplete="off" required>
+                <label class="messenger-attach-btn" for="messengerFileInput" title="Прикрепить файл">📎</label>
+                <input type="file" id="messengerFileInput" class="hidden">
+                <input type="text" id="messengerInput" placeholder="Введите сообщение..." autocomplete="off">
                 <button type="submit" class="btn btn-primary btn-sm">Отправить</button>
               </form>
             `}
@@ -1822,10 +1884,12 @@ const App = {
       }
     });
 
-    // Task file upload with validation & spinner
-    document.getElementById('taskFileInput')?.addEventListener('change', async (e) => {
-      const files = e.target.files;
-      if (!files.length) return;
+    // Task file upload with validation & spinner (input + drag-and-drop)
+    const dropZone = document.getElementById('dropZone');
+    const taskFileInput = document.getElementById('taskFileInput');
+
+    const handleTaskFiles = async (files) => {
+      if (!files || !files.length) return;
       const allErrors = [];
       for (const file of files) {
         const errors = this.validateFile(file);
@@ -1833,19 +1897,45 @@ const App = {
       }
       if (allErrors.length > 0) {
         alert('Ошибки валидации:\n' + allErrors.join('\n'));
-        e.target.value = '';
+        if (taskFileInput) taskFileInput.value = '';
         return;
       }
       const taskId = this.params.id;
-      const uploadSection = document.querySelector('.attachment-upload');
-      if (uploadSection) {
-        uploadSection.innerHTML = '<div class="spinner-inline"><div class="spinner"></div><span class="spinner-text">Загрузка файлов...</span></div>';
+      const progressEl = document.getElementById('uploadProgress');
+      const contentEl = dropZone?.querySelector('.drop-zone-content');
+      if (progressEl && contentEl) {
+        contentEl.classList.add('hidden');
+        progressEl.classList.remove('hidden');
+        const textEl = document.getElementById('uploadProgressText');
+        if (textEl) textEl.textContent = `Загрузка файлов (0/${files.length})...`;
       }
+      let uploaded = 0;
       for (const file of files) {
         await DB.uploadTaskFile(taskId, file, this.currentUser.id);
+        uploaded++;
+        const textEl = document.getElementById('uploadProgressText');
+        if (textEl) textEl.textContent = `Загрузка файлов (${uploaded}/${files.length})...`;
       }
       this.navigate('task-detail', { id: taskId });
-    });
+    };
+
+    taskFileInput?.addEventListener('change', (e) => handleTaskFiles(e.target.files));
+
+    if (dropZone) {
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drop-zone-active');
+      });
+      dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drop-zone-active');
+      });
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drop-zone-active');
+        handleTaskFiles(e.dataTransfer.files);
+      });
+    }
 
     // Delete attachment
     document.querySelectorAll('[data-delete-attachment]').forEach(btn => {
@@ -1953,6 +2043,14 @@ const App = {
       this.render();
     });
 
+    // Store: category filter
+    document.querySelectorAll('[data-store-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.params.storeCategory = btn.dataset.storeFilter;
+        this.render();
+      });
+    });
+
     // Store: buy product
     document.querySelectorAll('.buy-product-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1979,6 +2077,7 @@ const App = {
         name: document.getElementById('productName').value,
         icon: document.getElementById('productIcon').value,
         description: document.getElementById('productDesc').value,
+        category: document.getElementById('productCategory')?.value || 'other',
         price: parseInt(document.getElementById('productPrice').value),
         stock: stock ? parseInt(stock) : null,
         active: true,
@@ -1986,6 +2085,38 @@ const App = {
         createdAt: new Date().toISOString()
       });
       this.render();
+    });
+
+    // Store: edit product form
+    document.getElementById('editProductForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const id = document.getElementById('editProductId')?.value;
+      const stock = document.getElementById('productStock')?.value;
+      DB.updateStoreProduct(id, {
+        name: document.getElementById('productName').value,
+        icon: document.getElementById('productIcon').value,
+        description: document.getElementById('productDesc').value,
+        category: document.getElementById('productCategory')?.value || 'other',
+        price: parseInt(document.getElementById('productPrice').value),
+        stock: stock ? parseInt(stock) : null
+      });
+      this.params.editProductId = null;
+      this.render();
+    });
+
+    // Store: cancel edit
+    document.getElementById('cancelEditProduct')?.addEventListener('click', () => {
+      this.params.editProductId = null;
+      this.render();
+    });
+
+    // Store: edit product button
+    document.querySelectorAll('.edit-product-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.params.editProductId = btn.dataset.productId;
+        this.render();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
     });
 
     // Store: toggle product
@@ -2020,20 +2151,69 @@ const App = {
       });
     });
 
+    // Messenger: file attachment
+    this._messengerFile = null;
+    const messengerFileInput = document.getElementById('messengerFileInput');
+    const filePreview = document.getElementById('messengerFilePreview');
+    const fileNameEl = document.getElementById('messengerFileName');
+
+    messengerFileInput?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const errors = this.validateFile(file);
+      if (errors.length > 0) {
+        alert(errors.join('\n'));
+        e.target.value = '';
+        return;
+      }
+      this._messengerFile = file;
+      if (fileNameEl) fileNameEl.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
+      filePreview?.classList.remove('hidden');
+    });
+
+    document.getElementById('messengerFileRemove')?.addEventListener('click', () => {
+      this._messengerFile = null;
+      if (messengerFileInput) messengerFileInput.value = '';
+      filePreview?.classList.add('hidden');
+    });
+
     // Messenger: send message
-    document.getElementById('messengerForm')?.addEventListener('submit', (e) => {
+    document.getElementById('messengerForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const input = document.getElementById('messengerInput');
       const text = input.value.trim();
-      if (!text || !this.messengerChatWith) return;
-      DB.addMessage({
+      if (!text && !this._messengerFile) return;
+      if (!this.messengerChatWith) return;
+
+      const msg = {
         fromUserId: this.currentUser.id,
         toUserId: this.messengerChatWith,
-        text,
+        text: text || null,
         read: false,
+        fileName: null,
+        fileUrl: null,
+        fileSize: null,
+        fileType: null,
         createdAt: new Date().toISOString()
-      });
+      };
+
+      if (this._messengerFile) {
+        const submitBtn = document.querySelector('#messengerForm button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '...'; }
+        const fileData = await DB.uploadMessageFile(this._messengerFile);
+        if (fileData) {
+          msg.fileName = fileData.fileName;
+          msg.fileUrl = fileData.fileUrl;
+          msg.fileSize = fileData.fileSize;
+          msg.fileType = fileData.fileType;
+        }
+        this._messengerFile = null;
+      }
+
+      DB.addMessage(msg);
       input.value = '';
+      if (messengerFileInput) messengerFileInput.value = '';
+      filePreview?.classList.add('hidden');
       this.render();
       const msgs = document.getElementById('messengerMessages');
       if (msgs) msgs.scrollTop = msgs.scrollHeight;
