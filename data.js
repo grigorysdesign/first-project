@@ -243,6 +243,7 @@ const DB = {
         price: p.price,
         stock: p.stock,
         active: p.active,
+        category: p.category || 'other',
         createdBy: p.created_by,
         createdAt: p.created_at
       }));
@@ -262,6 +263,10 @@ const DB = {
         toUserId: m.to_user_id,
         text: m.text,
         read: m.read,
+        fileName: m.file_name || null,
+        fileUrl: m.file_url || null,
+        fileSize: m.file_size || null,
+        fileType: m.file_type || null,
         createdAt: m.created_at
       }));
 
@@ -338,6 +343,7 @@ const DB = {
         id: p.id, name: p.name, icon: p.icon,
         description: p.description, price: p.price,
         stock: p.stock, active: p.active,
+        category: p.category,
         created_by: p.createdBy, created_at: p.createdAt
       }),
       purchases: (p) => ({
@@ -347,7 +353,10 @@ const DB = {
       }),
       messages: (m) => ({
         id: m.id, from_user_id: m.fromUserId, to_user_id: m.toUserId,
-        text: m.text, read: m.read, created_at: m.createdAt
+        text: m.text, read: m.read,
+        file_name: m.fileName, file_url: m.fileUrl,
+        file_size: m.fileSize, file_type: m.fileType,
+        created_at: m.createdAt
       })
     };
 
@@ -659,6 +668,15 @@ const DB = {
   // ============================================
   // Store Products methods
   // ============================================
+  STORE_CATEGORIES: {
+    all: 'Все',
+    privileges: 'Привилегии',
+    merch: 'Мерч',
+    education: 'Обучение',
+    services: 'Услуги',
+    other: 'Другое'
+  },
+
   getStoreProducts() { return this._cache.storeProducts; },
 
   addStoreProduct(product) {
@@ -751,6 +769,23 @@ const DB = {
     this._cache.messages.push(message);
     this._sync('messages', 'insert', message);
     return message;
+  },
+
+  async uploadMessageFile(file) {
+    const ext = file.name.split('.').pop();
+    const path = `messages/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { data, error } = await supabaseClient.storage.from('message-files').upload(path, file);
+    if (error) {
+      console.error('Ошибка загрузки файла сообщения:', error.message);
+      return null;
+    }
+    const { data: urlData } = supabaseClient.storage.from('message-files').getPublicUrl(path);
+    return {
+      fileUrl: urlData.publicUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    };
   },
 
   markMessageRead(id) {
